@@ -1,0 +1,37 @@
+# env
+.env
+
+# Rust
+backend/target/
+backend/.sqlx/
+
+# Flutter/Dart
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.packages
+frontend/build/
+frontend/**/generated_plugin_registrant.dart
+frontend/pubspec.lock
+
+# Android
+frontend/android/**/gradle-wrapper.jar
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/android/key.properties
+frontend/android/app/*.jks
+
+# iOS
+frontend/ios/Pods/
+frontend/ios/.symlinks/
+frontend/ios/Flutter/Flutter.framework
+frontend/ios/Flutter/Flutter.podspec
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Postgres data (bind-mounted volumes, if any)
+pgdata/
