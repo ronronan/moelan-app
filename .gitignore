@@ -10,8 +10,6 @@ frontend/.flutter-plugins
 frontend/.flutter-plugins-dependencies
 frontend/.packages
 frontend/build/
-frontend/**/generated_plugin_registrant.dart
-frontend/pubspec.lock
 
 # Android
 frontend/android/**/gradle-wrapper.jar
