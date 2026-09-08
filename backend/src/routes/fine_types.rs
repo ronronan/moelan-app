@@ -2,22 +2,27 @@ use axum::{
     Json,
     extract::{Path, State},
 };
-use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::auth::{AdminUser, CurrentUser};
 use crate::db::models::FineType;
 use crate::dto::{CreateFineType, PatchFineType};
 use crate::error::{AppError, AppResult};
+use crate::state::AppState;
 
-pub async fn list_fine_types(State(pool): State<PgPool>) -> AppResult<Json<Vec<FineType>>> {
+pub async fn list_fine_types(
+    State(state): State<AppState>,
+    _user: CurrentUser,
+) -> AppResult<Json<Vec<FineType>>> {
     let types = sqlx::query_as!(FineType, "SELECT * FROM fine_types ORDER BY label")
-        .fetch_all(&pool)
+        .fetch_all(&state.pool)
         .await?;
     Ok(Json(types))
 }
 
 pub async fn create_fine_type(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    _admin: AdminUser,
     Json(body): Json<CreateFineType>,
 ) -> AppResult<Json<FineType>> {
     let fine_type = sqlx::query_as!(
@@ -27,13 +32,14 @@ pub async fn create_fine_type(
         body.label,
         body.amount_cents,
     )
-    .fetch_one(&pool)
+    .fetch_one(&state.pool)
     .await?;
     Ok(Json(fine_type))
 }
 
 pub async fn patch_fine_type(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    _admin: AdminUser,
     Path(id): Path<Uuid>,
     Json(body): Json<PatchFineType>,
 ) -> AppResult<Json<FineType>> {
@@ -53,7 +59,7 @@ pub async fn patch_fine_type(
         body.active,
         id,
     )
-    .fetch_optional(&pool)
+    .fetch_optional(&state.pool)
     .await?
     .ok_or(AppError::NotFound)?;
     Ok(Json(updated))

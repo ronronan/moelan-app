@@ -2,24 +2,27 @@ use axum::{
     Json,
     extract::{Path, State},
 };
-use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::auth::{AdminUser, CurrentUser};
 use crate::db::models::ConsumableType;
 use crate::dto::PatchConsumableType;
 use crate::error::{AppError, AppResult};
+use crate::state::AppState;
 
 pub async fn list_consumable_types(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    _user: CurrentUser,
 ) -> AppResult<Json<Vec<ConsumableType>>> {
     let types = sqlx::query_as!(ConsumableType, "SELECT * FROM consumable_types ORDER BY code")
-        .fetch_all(&pool)
+        .fetch_all(&state.pool)
         .await?;
     Ok(Json(types))
 }
 
 pub async fn patch_consumable_type(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    _admin: AdminUser,
     Path(id): Path<Uuid>,
     Json(body): Json<PatchConsumableType>,
 ) -> AppResult<Json<ConsumableType>> {
@@ -39,7 +42,7 @@ pub async fn patch_consumable_type(
         body.active,
         id,
     )
-    .fetch_optional(&pool)
+    .fetch_optional(&state.pool)
     .await?
     .ok_or(AppError::NotFound)?;
     Ok(Json(updated))

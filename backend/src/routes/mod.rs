@@ -1,6 +1,7 @@
 pub mod consumable_types;
 pub mod fine_types;
 pub mod health;
+pub mod me;
 pub mod players;
 pub mod transactions;
 
@@ -8,11 +9,13 @@ use axum::{
     Router,
     routing::{get, patch, post},
 };
-use sqlx::PgPool;
 
-pub fn build_router(pool: PgPool) -> Router {
+use crate::state::AppState;
+
+pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health))
+        .route("/api/me", get(me::me))
         .route(
             "/api/players",
             get(players::list_players).post(players::create_player),
@@ -55,5 +58,5 @@ pub fn build_router(pool: PgPool) -> Router {
             "/api/fine-types/{id}",
             patch(fine_types::patch_fine_type),
         )
-        .with_state(pool)
+        .with_state(state)
 }

@@ -2,66 +2,76 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use sqlx::{PgPool, QueryBuilder};
+use sqlx::QueryBuilder;
 use uuid::Uuid;
 
+use crate::auth::{AdminUser, CurrentUser};
 use crate::db::models::{Transaction, TransactionKind};
 use crate::dto::{CreateAdjustment, CreateConsumption, CreateCredit, CreateFine, TransactionQuery};
 use crate::error::AppResult;
 use crate::services::transactions as service;
-
-/// Placeholder actor identity until Keycloak auth lands (M4), which will
-/// replace this with the `sub` claim of the validated bearer token.
-const DEV_ACTOR: &str = "local-dev";
+use crate::state::AppState;
 
 pub async fn create_consumption(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    user: CurrentUser,
     Path(player_id): Path<Uuid>,
     Json(body): Json<CreateConsumption>,
 ) -> AppResult<Json<Transaction>> {
     let tx = service::record_consumption(
-        &pool,
+        &state.pool,
         player_id,
         body.consumable_type_id,
         body.quantity,
-        DEV_ACTOR,
+        &user.sub,
     )
     .await?;
     Ok(Json(tx))
 }
 
 pub async fn create_fine(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    user: CurrentUser,
     Path(player_id): Path<Uuid>,
     Json(body): Json<CreateFine>,
 ) -> AppResult<Json<Transaction>> {
-    let tx = service::record_fine(&pool, player_id, body.fine_type_id, body.note, DEV_ACTOR).await?;
-    Ok(Json(tx))
-}
-
-pub async fn create_credit(
-    State(pool): State<PgPool>,
-    Path(player_id): Path<Uuid>,
-    Json(body): Json<CreateCredit>,
-) -> AppResult<Json<Transaction>> {
     let tx =
-        service::record_credit(&pool, player_id, body.amount_cents, body.note, DEV_ACTOR).await?;
-    Ok(Json(tx))
-}
-
-pub async fn create_adjustment(
-    State(pool): State<PgPool>,
-    Path(player_id): Path<Uuid>,
-    Json(body): Json<CreateAdjustment>,
-) -> AppResult<Json<Transaction>> {
-    let tx =
-        service::record_adjustment(&pool, player_id, body.amount_cents, body.note, DEV_ACTOR)
+        service::record_fine(&state.pool, player_id, body.fine_type_id, body.note, &user.sub)
             .await?;
     Ok(Json(tx))
 }
 
+pub async fn create_credit(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Path(player_id): Path<Uuid>,
+    Json(body): Json<CreateCredit>,
+) -> AppResult<Json<Transaction>> {
+    let tx = service::record_credit(&state.pool, player_id, body.amount_cents, body.note, &user.sub)
+        .await?;
+    Ok(Json(tx))
+}
+
+pub async fn create_adjustment(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(player_id): Path<Uuid>,
+    Json(body): Json<CreateAdjustment>,
+) -> AppResult<Json<Transaction>> {
+    let tx = service::record_adjustment(
+        &state.pool,
+        player_id,
+        body.amount_cents,
+        body.note,
+        &admin.0.sub,
+    )
+    .await?;
+    Ok(Json(tx))
+}
+
 pub async fn list_player_transactions(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    _user: CurrentUser,
     Path(player_id): Path<Uuid>,
     Query(query): Query<TransactionQuery>,
 ) -> AppResult<Json<Vec<Transaction>>> {
@@ -80,13 +90,14 @@ pub async fn list_player_transactions(
         limit,
         offset,
     )
-    .fetch_all(&pool)
+    .fetch_all(&state.pool)
     .await?;
     Ok(Json(transactions))
 }
 
 pub async fn list_transactions(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    _user: CurrentUser,
     Query(query): Query<TransactionQuery>,
 ) -> AppResult<Json<Vec<Transaction>>> {
     let (limit, offset) = paginate(&query);
@@ -115,7 +126,7 @@ pub async fn list_transactions(
 
     let transactions = builder
         .build_query_as::<Transaction>()
-        .fetch_all(&pool)
+        .fetch_all(&state.pool)
         .await?;
     Ok(Json(transactions))
 }

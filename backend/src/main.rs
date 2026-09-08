@@ -1,11 +1,17 @@
+mod auth;
 mod config;
 mod db;
 mod dto;
 mod error;
 mod routes;
 mod services;
+mod state;
 
+use std::sync::Arc;
+
+use auth::JwtValidator;
 use config::Config;
+use state::AppState;
 
 #[tokio::main]
 async fn main() {
@@ -25,7 +31,13 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
-    let app = routes::build_router(pool);
+    let jwt = Arc::new(JwtValidator::new(
+        config.keycloak_issuer_url.clone(),
+        config.keycloak_audience.clone(),
+    ));
+
+    let state = AppState { pool, jwt };
+    let app = routes::build_router(state);
 
     let listener = tokio::net::TcpListener::bind(&config.bind_addr)
         .await

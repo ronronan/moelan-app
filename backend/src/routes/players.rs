@@ -3,12 +3,13 @@ use axum::{
     extract::{Path, Query, State},
 };
 use serde::Deserialize;
-use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::auth::{AdminUser, CurrentUser};
 use crate::db::models::Player;
 use crate::dto::PatchPlayer;
 use crate::error::{AppError, AppResult};
+use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct ListPlayersQuery {
@@ -16,7 +17,8 @@ pub struct ListPlayersQuery {
 }
 
 pub async fn list_players(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    _user: CurrentUser,
     Query(query): Query<ListPlayersQuery>,
 ) -> AppResult<Json<Vec<Player>>> {
     let players = match query.active {
@@ -26,12 +28,12 @@ pub async fn list_players(
                 "SELECT * FROM players WHERE active = $1 ORDER BY last_name, first_name",
                 active
             )
-            .fetch_all(&pool)
+            .fetch_all(&state.pool)
             .await?
         }
         None => {
             sqlx::query_as!(Player, "SELECT * FROM players ORDER BY last_name, first_name")
-                .fetch_all(&pool)
+                .fetch_all(&state.pool)
                 .await?
         }
     };
@@ -39,7 +41,8 @@ pub async fn list_players(
 }
 
 pub async fn create_player(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    _admin: AdminUser,
     Json(body): Json<crate::dto::CreatePlayer>,
 ) -> AppResult<Json<Player>> {
     let player = sqlx::query_as!(
@@ -48,24 +51,26 @@ pub async fn create_player(
         body.first_name,
         body.last_name,
     )
-    .fetch_one(&pool)
+    .fetch_one(&state.pool)
     .await?;
     Ok(Json(player))
 }
 
 pub async fn get_player(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    _user: CurrentUser,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Player>> {
     let player = sqlx::query_as!(Player, "SELECT * FROM players WHERE id = $1", id)
-        .fetch_optional(&pool)
+        .fetch_optional(&state.pool)
         .await?
         .ok_or(AppError::NotFound)?;
     Ok(Json(player))
 }
 
 pub async fn patch_player(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
+    _admin: AdminUser,
     Path(id): Path<Uuid>,
     Json(body): Json<PatchPlayer>,
 ) -> AppResult<Json<Player>> {
@@ -85,7 +90,7 @@ pub async fn patch_player(
         body.active,
         id,
     )
-    .fetch_optional(&pool)
+    .fetch_optional(&state.pool)
     .await?
     .ok_or(AppError::NotFound)?;
     Ok(Json(player))
