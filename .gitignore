@@ -3,7 +3,6 @@
 
 # Rust
 backend/target/
-backend/.sqlx/
 
 # Flutter/Dart
 frontend/.dart_tool/
