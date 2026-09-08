@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import 'core/auth/auth_providers.dart';
 import 'features/auth/login_screen.dart';
-import 'features/home/home_screen.dart';
+import 'features/players/dashboard_screen.dart';
+import 'features/players/player_detail_screen.dart';
 
 /// Notifies GoRouter to re-run `redirect` whenever the oidc init/user state
 /// changes, without recreating the GoRouter instance itself (which would
@@ -39,8 +40,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+      GoRoute(path: '/', builder: (context, state) => const DashboardScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/players/:id',
+        builder: (context, state) =>
+            PlayerDetailScreen(playerId: state.pathParameters['id']!),
+      ),
     ],
   );
 });

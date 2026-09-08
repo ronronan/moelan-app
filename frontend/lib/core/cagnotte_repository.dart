@@ -1,0 +1,137 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../models/consumable_type.dart';
+import '../models/fine_type.dart';
+import '../models/player.dart';
+import '../models/transaction.dart';
+import 'api_client.dart';
+
+/// Talks to every `/api/*` route: players, consumable/fine type config, and
+/// the actions (consumptions/fines/credits) that write to the ledger.
+class CagnotteRepository {
+  CagnotteRepository(this._dio);
+
+  final Dio _dio;
+
+  Future<List<Player>> listPlayers() async {
+    final res = await _dio.get('/api/players');
+    return (res.data as List).map((e) => Player.fromJson(e)).toList();
+  }
+
+  Future<Player> getPlayer(String id) async {
+    final res = await _dio.get('/api/players/$id');
+    return Player.fromJson(res.data);
+  }
+
+  Future<Player> createPlayer(String firstName, String lastName) async {
+    final res = await _dio.post(
+      '/api/players',
+      data: {'first_name': firstName, 'last_name': lastName},
+    );
+    return Player.fromJson(res.data);
+  }
+
+  Future<List<ConsumableType>> listConsumableTypes() async {
+    final res = await _dio.get('/api/consumable-types');
+    return (res.data as List).map((e) => ConsumableType.fromJson(e)).toList();
+  }
+
+  Future<ConsumableType> patchConsumableType(
+    String id, {
+    int? priceCents,
+    String? label,
+    bool? active,
+  }) async {
+    final res = await _dio.patch(
+      '/api/consumable-types/$id',
+      data: {
+        if (priceCents != null) 'price_cents': priceCents,
+        if (label != null) 'label': label,
+        if (active != null) 'active': active,
+      },
+    );
+    return ConsumableType.fromJson(res.data);
+  }
+
+  Future<List<FineType>> listFineTypes() async {
+    final res = await _dio.get('/api/fine-types');
+    return (res.data as List).map((e) => FineType.fromJson(e)).toList();
+  }
+
+  Future<FineType> createFineType(String code, String label, int amountCents) async {
+    final res = await _dio.post(
+      '/api/fine-types',
+      data: {'code': code, 'label': label, 'amount_cents': amountCents},
+    );
+    return FineType.fromJson(res.data);
+  }
+
+  Future<FineType> patchFineType(
+    String id, {
+    int? amountCents,
+    String? label,
+    bool? active,
+  }) async {
+    final res = await _dio.patch(
+      '/api/fine-types/$id',
+      data: {
+        if (amountCents != null) 'amount_cents': amountCents,
+        if (label != null) 'label': label,
+        if (active != null) 'active': active,
+      },
+    );
+    return FineType.fromJson(res.data);
+  }
+
+  Future<Transaction> recordConsumption(String playerId, String consumableTypeId) async {
+    final res = await _dio.post(
+      '/api/players/$playerId/consumptions',
+      data: {'consumable_type_id': consumableTypeId},
+    );
+    return Transaction.fromJson(res.data);
+  }
+
+  Future<Transaction> recordFine(String playerId, String fineTypeId, {String? note}) async {
+    final res = await _dio.post(
+      '/api/players/$playerId/fines',
+      data: {'fine_type_id': fineTypeId, if (note != null) 'note': note},
+    );
+    return Transaction.fromJson(res.data);
+  }
+
+  Future<Transaction> recordCredit(String playerId, int amountCents, {String? note}) async {
+    final res = await _dio.post(
+      '/api/players/$playerId/credits',
+      data: {'amount_cents': amountCents, if (note != null) 'note': note},
+    );
+    return Transaction.fromJson(res.data);
+  }
+
+  Future<List<Transaction>> listPlayerTransactions(String playerId) async {
+    final res = await _dio.get('/api/players/$playerId/transactions');
+    return (res.data as List).map((e) => Transaction.fromJson(e)).toList();
+  }
+
+  Future<List<Transaction>> listTransactions({
+    String? playerId,
+    String? kind,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final res = await _dio.get(
+      '/api/transactions',
+      queryParameters: {
+        if (playerId != null) 'player_id': playerId,
+        if (kind != null) 'kind': kind,
+        if (from != null) 'from': from.toIso8601String(),
+        if (to != null) 'to': to.toIso8601String(),
+      },
+    );
+    return (res.data as List).map((e) => Transaction.fromJson(e)).toList();
+  }
+}
+
+final cagnotteRepositoryProvider = Provider<CagnotteRepository>((ref) {
+  return CagnotteRepository(ref.watch(apiClientProvider));
+});

@@ -9,6 +9,7 @@ use axum::{
     Router,
     routing::{get, patch, post},
 };
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::state::AppState;
 
@@ -59,4 +60,14 @@ pub fn build_router(state: AppState) -> Router {
             patch(fine_types::patch_fine_type),
         )
         .with_state(state)
+        // The Flutter web app calls this API from a different origin
+        // (different port); browsers require CORS headers before they'll
+        // even let a fetch's response through. Bearer tokens (not cookies)
+        // carry auth, so a wide-open CORS policy doesn't expose sessions.
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
 }
