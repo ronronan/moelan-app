@@ -20,6 +20,12 @@ class DashboardScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Moelan App'),
         actions: [
+          if (isAdmin)
+            IconButton(
+              icon: const Icon(Icons.settings),
+              tooltip: 'Réglages',
+              onPressed: () => context.push('/settings'),
+            ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Se déconnecter',
