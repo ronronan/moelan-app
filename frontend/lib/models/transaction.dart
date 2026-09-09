@@ -9,6 +9,14 @@ TransactionKind _kindFromJson(String value) => switch (value) {
   _ => throw ArgumentError('unknown transaction kind: $value'),
 };
 
+String transactionKindToJson(TransactionKind kind) => switch (kind) {
+  TransactionKind.beer => 'beer',
+  TransactionKind.soft => 'soft',
+  TransactionKind.fine => 'fine',
+  TransactionKind.credit => 'credit',
+  TransactionKind.manualAdjustment => 'manual_adjustment',
+};
+
 class Transaction {
   const Transaction({
     required this.id,

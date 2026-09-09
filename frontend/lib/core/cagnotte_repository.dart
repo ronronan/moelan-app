@@ -118,6 +118,8 @@ class CagnotteRepository {
     String? kind,
     DateTime? from,
     DateTime? to,
+    int? page,
+    int? pageSize,
   }) async {
     final res = await _dio.get(
       '/api/transactions',
@@ -126,6 +128,8 @@ class CagnotteRepository {
         if (kind != null) 'kind': kind,
         if (from != null) 'from': from.toIso8601String(),
         if (to != null) 'to': to.toIso8601String(),
+        if (page != null) 'page': page,
+        if (pageSize != null) 'page_size': pageSize,
       },
     );
     return (res.data as List).map((e) => Transaction.fromJson(e)).toList();

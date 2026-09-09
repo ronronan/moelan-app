@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'core/auth/auth_providers.dart';
 import 'features/auth/login_screen.dart';
+import 'features/history/history_screen.dart';
 import 'features/players/dashboard_screen.dart';
 import 'features/players/player_detail_screen.dart';
 import 'features/settings/settings_screen.dart';
@@ -49,6 +50,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             PlayerDetailScreen(playerId: state.pathParameters['id']!),
       ),
       GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+      GoRoute(
+        path: '/history',
+        builder: (context, state) =>
+            HistoryScreen(initialPlayerId: state.uri.queryParameters['playerId']),
+      ),
     ],
   );
 });
