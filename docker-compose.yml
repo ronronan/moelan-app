@@ -35,5 +35,67 @@ services:
       postgres:
         condition: service_healthy
 
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/app
+      BIND_ADDR: 0.0.0.0:8000
+      # Must match the `iss` claim Keycloak puts in tokens, i.e. the
+      # hostname browsers use to reach it (KC_HOSTNAME below) — the API
+      # container can't resolve that hostname to the keycloak container,
+      # so it fetches keys via KEYCLOAK_JWKS_URL (internal DNS) instead.
+      KEYCLOAK_ISSUER_URL: http://${KEYCLOAK_HOSTNAME:-localhost}:8080/realms/moelan
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/moelan
+      KEYCLOAK_AUDIENCE: moelan-api
+      RUST_LOG: info
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: ./infra/web/Dockerfile
+      args:
+        API_BASE_URL: ${PUBLIC_API_BASE_URL:-http://localhost:8000}
+        KEYCLOAK_ISSUER_URL: ${PUBLIC_KEYCLOAK_ISSUER_URL:-http://localhost:8080/realms/moelan}
+    ports:
+      - "8090:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Optional: puts web/api/keycloak behind one hostname. Off by default
+  # (`docker compose up` never starts it); enable with
+  # `docker compose --profile proxy up`. See infra/caddy/Caddyfile and
+  # README's "Production deployment" section before using this for a
+  # real domain — KC_HOSTNAME and the PUBLIC_* build args need to agree
+  # with MOELAN_DOMAIN once Caddy is the front door.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["proxy"]
+    ports:
+      - "${CADDY_HTTP_PORT:-8888}:80"
+      - "${CADDY_HTTPS_PORT:-8443}:443"
+    environment:
+      MOELAN_DOMAIN: ${MOELAN_DOMAIN:-localhost}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - web
+      - api
+      - keycloak
+
 volumes:
   pg_data:
+  caddy_data:

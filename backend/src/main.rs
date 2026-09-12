@@ -32,6 +32,7 @@ async fn main() {
         .expect("failed to run migrations");
 
     let jwt = Arc::new(JwtValidator::new(
+        config.keycloak_jwks_url.clone(),
         config.keycloak_issuer_url.clone(),
         config.keycloak_audience.clone(),
     ));

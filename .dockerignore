@@ -1,0 +1,4 @@
+.git/
+backend/target/
+frontend/build/
+frontend/.dart_tool/

@@ -43,17 +43,27 @@ struct CachedJwks {
 /// Validates Keycloak-issued access tokens against the realm's JWKS,
 /// re-fetching the key set only once the cache goes stale rather than on
 /// every request.
+///
+/// `jwks_base_url` and `expected_issuer` are deliberately separate: in
+/// Docker Compose the API reaches Keycloak over the internal network
+/// (`http://keycloak:8080/...`) but the `iss` claim in every token is
+/// whatever hostname the *browser* used to talk to Keycloak (e.g.
+/// `http://localhost:8080/...`, from `KC_HOSTNAME`) — those two URLs are
+/// not the same host, so fetching keys and validating `iss` cannot share
+/// one field once the API runs in a container.
 pub struct JwtValidator {
-    issuer: String,
+    jwks_base_url: String,
+    expected_issuer: String,
     audience: String,
     http: reqwest::Client,
     cache: RwLock<Option<CachedJwks>>,
 }
 
 impl JwtValidator {
-    pub fn new(issuer: String, audience: String) -> Self {
+    pub fn new(jwks_base_url: String, expected_issuer: String, audience: String) -> Self {
         Self {
-            issuer,
+            jwks_base_url,
+            expected_issuer,
             audience,
             http: reqwest::Client::new(),
             cache: RwLock::new(None),
@@ -61,13 +71,13 @@ impl JwtValidator {
     }
 
     async fn jwks(&self) -> AppResult<JwkSet> {
-        if let Some(cached) = self.cache.read().await.as_ref() {
-            if cached.fetched_at.elapsed() < JWKS_CACHE_TTL {
-                return Ok(cached.keys.clone());
-            }
+        if let Some(cached) = self.cache.read().await.as_ref()
+            && cached.fetched_at.elapsed() < JWKS_CACHE_TTL
+        {
+            return Ok(cached.keys.clone());
         }
 
-        let url = format!("{}/protocol/openid-connect/certs", self.issuer);
+        let url = format!("{}/protocol/openid-connect/certs", self.jwks_base_url);
         let keys: JwkSet = self
             .http
             .get(&url)
@@ -95,7 +105,7 @@ impl JwtValidator {
 
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_audience(&[&self.audience]);
-        validation.set_issuer(&[&self.issuer]);
+        validation.set_issuer(&[&self.expected_issuer]);
 
         let data = decode::<RawClaims>(token, &decoding_key, &validation)
             .map_err(|_| AppError::Unauthorized)?;
