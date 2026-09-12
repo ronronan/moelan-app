@@ -120,4 +120,38 @@ Le flux de login via Caddy sur un vrai domaine n'a pas pu être testé de bout e
 bout dans cet environnement (pas de nom de domaine public disponible) ; seul le
 routage des chemins a été vérifié.
 
+## Sauvegardes Postgres
+
+```bash
+./infra/postgres/backup.sh                 # -> ./backups/{app,keycloak}-<date>.sql.gz
+./infra/postgres/backup.sh /var/backups/moelan
+```
+
+Conserve les 14 dernières sauvegardes par base. À planifier via cron pour des
+sauvegardes régulières (voir l'en-tête du script pour un exemple de ligne
+crontab).
+
+## Build Android
+
+Un `flutter build apk --release` (ou `--appbundle`) fonctionne tel quel,
+signé avec la clé de debug — suffisant pour tester l'installation sur un
+téléphone, pas pour publier sur le Play Store. Pour une vraie release :
+
+1. `cp frontend/android/key.properties.example frontend/android/key.properties`
+2. Suivre les instructions dans ce fichier pour générer un keystore et
+   renseigner les mots de passe
+3. `flutter build appbundle --release`
+
+`key.properties` et les fichiers `.jks` sont gitignorés — ne jamais les
+committer (leur perte empêche de publier une mise à jour d'une app déjà en
+ligne sur le Play Store).
+
+L'app iOS n'a pas été configurée (nécessite un Mac).
+
+## CI
+
+`.github/workflows/ci.yml` fait tourner, sur chaque push/PR : `cargo fmt
+--check`, `cargo clippy`, `cargo test` (contre un vrai Postgres de service) côté
+backend, et `flutter analyze` côté frontend.
+
 Voir le plan d'implémentation complet dans `PLAN.md` (jalons M0 à M10).

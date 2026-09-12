@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: moelan
+          POSTGRES_PASSWORD: changeme
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U moelan"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://moelan:changeme@localhost:5432/app
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+
+      # Raw psql rather than sqlx-cli: sqlx-cli compiles from source (a
+      # few minutes) on every cache miss, and applying these two SQL
+      # files directly needs nothing extra.
+      - name: Apply migrations
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -yqq postgresql-client
+          for f in migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
+
+      - name: cargo fmt --check
+        run: cargo fmt --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets
+
+      - name: cargo test
+        run: cargo test
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - run: flutter pub get
+      - run: flutter analyze
+      # No widget/unit tests exist yet (frontend/test/ is empty) — `flutter
+      # test` errors out with no test files rather than passing trivially,
+      # so there's nothing useful to run here until some are added.

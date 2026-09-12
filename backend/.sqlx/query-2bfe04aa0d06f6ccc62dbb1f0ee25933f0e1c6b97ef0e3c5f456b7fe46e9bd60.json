@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT balance_cents FROM players WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "balance_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "players",
+            "name": "balance_cents"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2bfe04aa0d06f6ccc62dbb1f0ee25933f0e1c6b97ef0e3c5f456b7fe46e9bd60"
+}

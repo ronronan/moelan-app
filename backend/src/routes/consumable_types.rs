@@ -14,9 +14,12 @@ pub async fn list_consumable_types(
     State(state): State<AppState>,
     _user: CurrentUser,
 ) -> AppResult<Json<Vec<ConsumableType>>> {
-    let types = sqlx::query_as!(ConsumableType, "SELECT * FROM consumable_types ORDER BY code")
-        .fetch_all(&state.pool)
-        .await?;
+    let types = sqlx::query_as!(
+        ConsumableType,
+        "SELECT * FROM consumable_types ORDER BY code"
+    )
+    .fetch_all(&state.pool)
+    .await?;
     Ok(Json(types))
 }
 

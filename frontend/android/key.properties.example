@@ -1,0 +1,14 @@
+# Copy this file to key.properties (gitignored) in the same directory and
+# fill in your real keystore's details to produce signed release builds.
+#
+# Generate a keystore once with:
+#   keytool -genkey -v -keystore ~/moelan-release.jks -keyalg RSA -keysize 2048 \
+#     -validity 10000 -alias moelan
+#
+# Keep the .jks file and these passwords out of git — losing them means
+# you can never publish an update to an existing Play Store listing under
+# the same app.
+storePassword=changeme
+keyPassword=changeme
+keyAlias=moelan
+storeFile=/absolute/path/to/moelan-release.jks

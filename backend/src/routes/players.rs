@@ -32,9 +32,12 @@ pub async fn list_players(
             .await?
         }
         None => {
-            sqlx::query_as!(Player, "SELECT * FROM players ORDER BY last_name, first_name")
-                .fetch_all(&state.pool)
-                .await?
+            sqlx::query_as!(
+                Player,
+                "SELECT * FROM players ORDER BY last_name, first_name"
+            )
+            .fetch_all(&state.pool)
+            .await?
         }
     };
     Ok(Json(players))

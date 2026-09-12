@@ -151,9 +151,7 @@ pub async fn record_credit(
     created_by: &str,
 ) -> AppResult<Transaction> {
     if amount_cents <= 0 {
-        return Err(AppError::BadRequest(
-            "amount_cents must be positive".into(),
-        ));
+        return Err(AppError::BadRequest("amount_cents must be positive".into()));
     }
 
     insert_and_apply(
@@ -191,4 +189,96 @@ pub async fn record_adjustment(
         created_by,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn test_pool() -> PgPool {
+        let url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set to run these tests (needs a real Postgres)");
+        PgPool::connect(&url)
+            .await
+            .expect("failed to connect to test database")
+    }
+
+    async fn create_test_player(pool: &PgPool, label: &str) -> Uuid {
+        sqlx::query_scalar!(
+            "INSERT INTO players (first_name, last_name) VALUES ($1, 'Test') RETURNING id",
+            label
+        )
+        .fetch_one(pool)
+        .await
+        .expect("failed to create test player")
+    }
+
+    /// The one invariant the whole ledger design exists to guarantee:
+    /// `players.balance_cents` always equals the sum of that player's
+    /// `transactions` rows, no matter which mix of actions produced it.
+    #[tokio::test]
+    async fn balance_matches_sum_of_ledger_after_mixed_actions() {
+        let pool = test_pool().await;
+        let player_id = create_test_player(&pool, "balance-sum-check").await;
+
+        let beer_id: Uuid =
+            sqlx::query_scalar!("SELECT id FROM consumable_types WHERE code = 'beer'")
+                .fetch_one(&pool)
+                .await
+                .expect("seed data must contain a 'beer' consumable type");
+        let fine_id: Uuid =
+            sqlx::query_scalar!("SELECT id FROM fine_types WHERE code = 'red_card'")
+                .fetch_one(&pool)
+                .await
+                .expect("seed data must contain a 'red_card' fine type");
+
+        record_credit(&pool, player_id, 2000, None, "test")
+            .await
+            .expect("credit should succeed");
+        record_consumption(&pool, player_id, beer_id, 2, "test")
+            .await
+            .expect("consumption should succeed");
+        record_fine(&pool, player_id, fine_id, None, "test")
+            .await
+            .expect("fine should succeed");
+
+        let balance: i64 =
+            sqlx::query_scalar!("SELECT balance_cents FROM players WHERE id = $1", player_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let ledger_sum: i64 = sqlx::query_scalar!(
+            "SELECT COALESCE(SUM(amount_cents), 0)::bigint FROM transactions WHERE player_id = $1",
+            player_id
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(
+            ledger_sum, balance,
+            "cached balance must equal the ledger sum"
+        );
+        assert_eq!(
+            balance,
+            2000 - 200 - 500,
+            "2000 credit - 2 beers (1€) - red_card (5€)"
+        );
+    }
+
+    #[tokio::test]
+    async fn action_on_unknown_player_returns_not_found() {
+        let pool = test_pool().await;
+        let result = record_credit(&pool, Uuid::new_v4(), 100, None, "test").await;
+        assert!(matches!(result, Err(AppError::NotFound)));
+    }
+
+    #[tokio::test]
+    async fn negative_credit_amount_is_rejected() {
+        let pool = test_pool().await;
+        let player_id = create_test_player(&pool, "negative-credit-check").await;
+        let result = record_credit(&pool, player_id, -100, None, "test").await;
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+    }
 }

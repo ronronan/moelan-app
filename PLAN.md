@@ -81,17 +81,17 @@ Services : `postgres` (18-alpine, avec healthcheck), `keycloak` (26.0, `start --
 
 ## Ordre de construction (jalons incrémentaux)
 
-1. **M0** — Scaffolding : git init, arborescence, `docker-compose.yml` avec juste `postgres`, `.env.example`.
-2. **M1** — Schéma : migrations sqlx (tables + seed), vérifiées via `psql`.
-3. **M2** — API core sans auth : routes CRUD/actions fonctionnelles, testées au `curl`/`httpie` — première tranche démontrable.
-4. **M3** — Keycloak : service + DB dédiée, realm/clients/rôles construits dans la console admin puis exportés dans `infra/keycloak/realm-export.json`.
-5. **M4** — Auth branchée sur l'API : validation JWT, extracteurs de rôle, `/api/me`, routes admin protégées.
-6. **M5** — Flutter skeleton + login : routing, branding, intégration `oidc` (le plus délicat : flux PKCE en web) — jalon à isoler avant de le brancher au reste.
-7. **M6** — Écrans cœur : dashboard + détail joueur branchés à l'API réelle.
-8. **M7** — Écrans admin : tarifs et types d'amendes.
-9. **M8** — Historique/audit avec filtres et pagination.
-10. **M9** — Polish : image web nginx, Caddy, README, états vides/erreurs, formatage monétaire, touche finale "objectif Moelan-sur-Mer" sur le dashboard.
-11. **M10** (bonus, plus tard) — CI (cargo test/clippy, flutter analyze), sauvegarde Postgres, build Android release, build iOS (nécessite un Mac, non bloquant).
+1. ✅ **M0** — Scaffolding : git init, arborescence, `docker-compose.yml` avec juste `postgres`, `.env.example`.
+2. ✅ **M1** — Schéma : migrations sqlx (tables + seed), vérifiées via `psql`.
+3. ✅ **M2** — API core sans auth : routes CRUD/actions fonctionnelles, testées au `curl`/`httpie` — première tranche démontrable.
+4. ✅ **M3** — Keycloak : service + DB dédiée, realm/clients/rôles construits dans la console admin puis exportés dans `infra/keycloak/realm-export.json`.
+5. ✅ **M4** — Auth branchée sur l'API : validation JWT, extracteurs de rôle, `/api/me`, routes admin protégées.
+6. ✅ **M5** — Flutter skeleton + login : routing, branding, intégration `oidc` (le plus délicat : flux PKCE en web) — jalon à isoler avant de le brancher au reste.
+7. ✅ **M6** — Écrans cœur : dashboard + détail joueur branchés à l'API réelle.
+8. ✅ **M7** — Écrans admin : tarifs et types d'amendes.
+9. ✅ **M8** — Historique/audit avec filtres et pagination.
+10. ✅ **M9** — Polish : image web nginx, Caddy, README, états vides/erreurs, formatage monétaire, touche finale "objectif Moelan-sur-Mer" sur le dashboard.
+11. ✅ **M10** (partiel : CI + tests + backup + scaffolding signature Android faits ; build Android release réel et iOS non faits, nécessitent respectivement un vrai keystore et un Mac) (bonus, plus tard) — CI (cargo test/clippy, flutter analyze), sauvegarde Postgres, build Android release, build iOS (nécessite un Mac, non bloquant).
 
 Chaque jalon jusqu'à M8 produit quelque chose de testable, pour éviter un big-bang d'intégration.
 

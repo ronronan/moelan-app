@@ -46,9 +46,9 @@ class CagnotteRepository {
     final res = await _dio.patch(
       '/api/consumable-types/$id',
       data: {
-        if (priceCents != null) 'price_cents': priceCents,
-        if (label != null) 'label': label,
-        if (active != null) 'active': active,
+        'price_cents': ?priceCents,
+        'label': ?label,
+        'active': ?active,
       },
     );
     return ConsumableType.fromJson(res.data);
@@ -76,9 +76,9 @@ class CagnotteRepository {
     final res = await _dio.patch(
       '/api/fine-types/$id',
       data: {
-        if (amountCents != null) 'amount_cents': amountCents,
-        if (label != null) 'label': label,
-        if (active != null) 'active': active,
+        'amount_cents': ?amountCents,
+        'label': ?label,
+        'active': ?active,
       },
     );
     return FineType.fromJson(res.data);
@@ -95,7 +95,7 @@ class CagnotteRepository {
   Future<Transaction> recordFine(String playerId, String fineTypeId, {String? note}) async {
     final res = await _dio.post(
       '/api/players/$playerId/fines',
-      data: {'fine_type_id': fineTypeId, if (note != null) 'note': note},
+      data: {'fine_type_id': fineTypeId, 'note': ?note},
     );
     return Transaction.fromJson(res.data);
   }
@@ -103,7 +103,7 @@ class CagnotteRepository {
   Future<Transaction> recordCredit(String playerId, int amountCents, {String? note}) async {
     final res = await _dio.post(
       '/api/players/$playerId/credits',
-      data: {'amount_cents': amountCents, if (note != null) 'note': note},
+      data: {'amount_cents': amountCents, 'note': ?note},
     );
     return Transaction.fromJson(res.data);
   }
@@ -124,12 +124,12 @@ class CagnotteRepository {
     final res = await _dio.get(
       '/api/transactions',
       queryParameters: {
-        if (playerId != null) 'player_id': playerId,
-        if (kind != null) 'kind': kind,
+        'player_id': ?playerId,
+        'kind': ?kind,
         if (from != null) 'from': from.toIso8601String(),
         if (to != null) 'to': to.toIso8601String(),
-        if (page != null) 'page': page,
-        if (pageSize != null) 'page_size': pageSize,
+        'page': ?page,
+        'page_size': ?pageSize,
       },
     );
     return (res.data as List).map((e) => Transaction.fromJson(e)).toList();

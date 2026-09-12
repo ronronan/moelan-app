@@ -32,3 +32,4 @@ frontend/ios/Flutter/Flutter.podspec
 
 # Postgres data (bind-mounted volumes, if any)
 pgdata/
+/backups/

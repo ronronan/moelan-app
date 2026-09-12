@@ -35,9 +35,14 @@ pub async fn create_fine(
     Path(player_id): Path<Uuid>,
     Json(body): Json<CreateFine>,
 ) -> AppResult<Json<Transaction>> {
-    let tx =
-        service::record_fine(&state.pool, player_id, body.fine_type_id, body.note, &user.sub)
-            .await?;
+    let tx = service::record_fine(
+        &state.pool,
+        player_id,
+        body.fine_type_id,
+        body.note,
+        &user.sub,
+    )
+    .await?;
     Ok(Json(tx))
 }
 
@@ -47,8 +52,14 @@ pub async fn create_credit(
     Path(player_id): Path<Uuid>,
     Json(body): Json<CreateCredit>,
 ) -> AppResult<Json<Transaction>> {
-    let tx = service::record_credit(&state.pool, player_id, body.amount_cents, body.note, &user.sub)
-        .await?;
+    let tx = service::record_credit(
+        &state.pool,
+        player_id,
+        body.amount_cents,
+        body.note,
+        &user.sub,
+    )
+    .await?;
     Ok(Json(tx))
 }
 
@@ -111,7 +122,10 @@ pub async fn list_transactions(
         builder.push(" AND player_id = ").push_bind(player_id);
     }
     if let Some(kind) = &query.kind {
-        builder.push(" AND kind = ").push_bind(kind.clone()).push("::transaction_kind");
+        builder
+            .push(" AND kind = ")
+            .push_bind(kind.clone())
+            .push("::transaction_kind");
     }
     if let Some(from) = query.from {
         builder.push(" AND created_at >= ").push_bind(from);
