@@ -80,45 +80,60 @@ migrations au boot. Puis, comme en développement :
   `http://localhost:8080/admin`)
 - Ouvrir l'app sur http://localhost:8090
 
-### Reverse proxy Caddy (optionnel)
+### Reverse proxy Traefik (optionnel)
 
-Un reverse proxy Caddy (`infra/caddy/Caddyfile`) peut regrouper web/API/Keycloak
-sous un seul nom d'hôte — pratique dès que l'app quitte `localhost`, et donne
-le HTTPS automatique gratuitement sur un vrai domaine. Désactivé par défaut ;
-pour l'activer :
+Un reverse proxy Traefik peut regrouper web/API/Keycloak sous un seul nom
+d'hôte — pratique dès que l'app quitte `localhost`. Le routage est défini par
+des labels Docker directement sur les services `web`/`api`/`keycloak`
+(`docker-compose.yml`) ; `infra/traefik/traefik.yml` ne contient que le point
+d'entrée et l'activation du provider Docker. Désactivé par défaut ; pour
+l'activer :
 
 ```bash
 docker compose --profile proxy up -d
 ```
 
-Par défaut (`MOELAN_DOMAIN` non défini) Caddy sert en HTTP simple sur
-`http://localhost:8888` (`CADDY_HTTP_PORT`), sans jamais tenter d'obtenir de
-certificat — pratique pour tester le routage localement (vérifié : `/`, `/api/*`
-et `/realms/*` sont bien proxifiés vers web/api/keycloak respectivement).
+Par défaut (`MOELAN_DOMAIN` non défini) Traefik sert en HTTP simple sur
+`http://localhost:8888` (`TRAEFIK_HTTP_PORT`) — pratique pour tester le
+routage localement. Vérifié de bout en bout : login complet (redirection
+Keycloak, échange de token, dashboard) en passant uniquement par
+`http://localhost:8888`, avec `/` → web, `/api/*` → api, `/realms/*`
+`/resources/*` `/admin/*` → keycloak.
 
 ### Déploiement en production (vrai domaine)
 
-Trois choses à aligner ensemble si vous mettez l'app derrière Caddy sur un vrai
-domaine (ex. `moelan.example.com`), sans quoi Keycloak rejettera les tokens
-(l'`iss` du token doit correspondre exactement à ce que l'API attend) :
+Trois choses à aligner ensemble si vous mettez l'app derrière Traefik sur un
+vrai domaine (ex. `moelan.example.com`), sans quoi Keycloak rejettera les
+tokens (l'`iss` du token doit correspondre exactement à ce que l'API attend) :
 
-1. Dans `.env` : `MOELAN_DOMAIN=moelan.example.com` (sans `http://`, pour que
-   Caddy obtienne un vrai certificat), `KEYCLOAK_HOSTNAME=moelan.example.com`,
-   `PUBLIC_API_BASE_URL=https://moelan.example.com/api`,
+1. Dans `.env` : `MOELAN_DOMAIN=moelan.example.com`,
+   `KEYCLOAK_HOSTNAME=moelan.example.com`,
+   `KEYCLOAK_ISSUER_URL=https://moelan.example.com/realms/moelan`,
+   `PUBLIC_API_BASE_URL=https://moelan.example.com` (l'origine seule, **sans**
+   `/api` — chaque appel ajoute déjà ce préfixe lui-même),
    `PUBLIC_KEYCLOAK_ISSUER_URL=https://moelan.example.com/realms/moelan`
-2. Dans le service `keycloak` du `docker-compose.yml` : ajouter
+2. HTTPS : Traefik n'obtient pas de certificat automatiquement comme Caddy —
+   il faut ajouter un point d'entrée `websecure` (443) et un
+   `certificatesResolvers` (Let's Encrypt) dans `infra/traefik/traefik.yml`,
+   puis un label `traefik.http.routers.<nom>.tls.certresolver=<resolver>` sur
+   chaque service. Voir la [doc Traefik ACME](https://doc.traefik.io/traefik/https/acme/).
+3. Dans le service `keycloak` du `docker-compose.yml` : ajouter
    `KC_PROXY_HEADERS: xforwarded` (pour que Keycloak fasse confiance aux
-   en-têtes `X-Forwarded-*` de Caddy — à ne faire que si Keycloak n'est plus
+   en-têtes `X-Forwarded-*` de Traefik — à ne faire que si Keycloak n'est plus
    exposé directement, sans quoi ces en-têtes sont falsifiables)
-3. Dans la console Keycloak (`moelan-web`) : mettre à jour les *Valid redirect
+4. Dans la console Keycloak (`moelan-web`) : mettre à jour les *Valid redirect
    URIs* et *Web origins* du client pour le vrai domaine (ils sont actuellement
    réglés sur `http://localhost:*` pour le développement) — puis ré-exporter
    le realm (`infra/keycloak/realm-export.json`) si vous voulez que ce
    changement soit reproductible
 
-Le flux de login via Caddy sur un vrai domaine n'a pas pu être testé de bout en
-bout dans cet environnement (pas de nom de domaine public disponible) ; seul le
-routage des chemins a été vérifié.
+Le HTTPS/ACME sur un vrai domaine n'a pas pu être testé dans cet environnement
+(pas de nom de domaine public disponible) ; le routage HTTP et le login complet
+ont été vérifiés en simulant un hostname unique via un port local
+(`http://localhost:8888`), ce qui a d'ailleurs révélé et corrigé deux bugs :
+`KEYCLOAK_ISSUER_URL` de l'API codait en dur le port `:8080` (cassait dès que
+Keycloak était joint via un autre hostname/port), et cette doc elle-même disait
+à tort d'ajouter `/api` à `PUBLIC_API_BASE_URL`.
 
 ## Sauvegardes Postgres
 

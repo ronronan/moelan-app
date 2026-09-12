@@ -1,0 +1,15 @@
+# Static Traefik configuration: entrypoints + the Docker provider only.
+# Actual routing (which host/path goes to which service) lives on that
+# service's own labels in docker-compose.yml, not here — that's the
+# idiomatic Traefik way and keeps routing next to the service it routes to.
+#
+# For a real domain you'll want a "websecure" (443) entrypoint plus a
+# certificatesResolvers block for Let's Encrypt — see README's
+# "Production deployment" section before deploying this off localhost.
+entryPoints:
+  web:
+    address: ":80"
+
+providers:
+  docker:
+    exposedByDefault: false

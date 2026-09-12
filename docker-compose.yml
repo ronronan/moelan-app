@@ -34,17 +34,27 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Only consulted when the "proxy" profile's traefik service is running.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.moelan-keycloak.rule=Host(`${MOELAN_DOMAIN:-localhost}`) && (PathPrefix(`/realms`) || PathPrefix(`/resources`) || PathPrefix(`/admin`))"
+      - "traefik.http.routers.moelan-keycloak.priority=10"
+      - "traefik.http.services.moelan-keycloak.loadbalancer.server.port=8080"
 
   api:
     build: ./backend
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/app
       BIND_ADDR: 0.0.0.0:8000
-      # Must match the `iss` claim Keycloak puts in tokens, i.e. the
-      # hostname browsers use to reach it (KC_HOSTNAME below) — the API
-      # container can't resolve that hostname to the keycloak container,
-      # so it fetches keys via KEYCLOAK_JWKS_URL (internal DNS) instead.
-      KEYCLOAK_ISSUER_URL: http://${KEYCLOAK_HOSTNAME:-localhost}:8080/realms/moelan
+      # Must match the `iss` claim Keycloak puts in tokens, i.e. wherever
+      # browsers actually reach it (KC_HOSTNAME below — set both from the
+      # same value in .env, they're independent here only because one
+      # sets Keycloak's own idea of its hostname and the other tells the
+      # API what to expect, and Keycloak's KC_HOSTNAME doesn't accept a
+      # port suffix the same way a URL does). The API container can't
+      # resolve that hostname to the keycloak container itself, so it
+      # fetches keys via KEYCLOAK_JWKS_URL (internal DNS) instead.
+      KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL:-http://localhost:8080/realms/moelan}
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/moelan
       KEYCLOAK_AUDIENCE: moelan-api
       RUST_LOG: info
@@ -60,6 +70,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.moelan-api.rule=Host(`${MOELAN_DOMAIN:-localhost}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.moelan-api.priority=10"
+      - "traefik.http.services.moelan-api.loadbalancer.server.port=8000"
 
   web:
     build:
@@ -73,24 +88,27 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.moelan-web.rule=Host(`${MOELAN_DOMAIN:-localhost}`)"
+      - "traefik.http.routers.moelan-web.priority=1"
+      - "traefik.http.services.moelan-web.loadbalancer.server.port=80"
 
   # Optional: puts web/api/keycloak behind one hostname. Off by default
   # (`docker compose up` never starts it); enable with
-  # `docker compose --profile proxy up`. See infra/caddy/Caddyfile and
-  # README's "Production deployment" section before using this for a
-  # real domain — KC_HOSTNAME and the PUBLIC_* build args need to agree
-  # with MOELAN_DOMAIN once Caddy is the front door.
-  caddy:
-    image: caddy:2-alpine
+  # `docker compose --profile proxy up`. See infra/traefik/traefik.yml and
+  # README's "Production deployment" section before using this for a real
+  # domain — KC_HOSTNAME and the PUBLIC_* build args need to agree with
+  # MOELAN_DOMAIN once Traefik is the front door. Routing itself is defined
+  # by the `traefik.http.*` labels on keycloak/api/web above, not here.
+  traefik:
+    image: traefik:v3.7
     profiles: ["proxy"]
     ports:
-      - "${CADDY_HTTP_PORT:-8888}:80"
-      - "${CADDY_HTTPS_PORT:-8443}:443"
-    environment:
-      MOELAN_DOMAIN: ${MOELAN_DOMAIN:-localhost}
+      - "${TRAEFIK_HTTP_PORT:-8888}:80"
     volumes:
-      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
+      - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - web
       - api
@@ -98,4 +116,3 @@ services:
 
 volumes:
   pg_data:
-  caddy_data:
