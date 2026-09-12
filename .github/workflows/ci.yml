@@ -69,6 +69,4 @@ jobs:
 
       - run: flutter pub get
       - run: flutter analyze
-      # No widget/unit tests exist yet (frontend/test/ is empty) — `flutter
-      # test` errors out with no test files rather than passing trivially,
-      # so there's nothing useful to run here until some are added.
+      - run: flutter test
