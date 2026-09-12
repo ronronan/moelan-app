@@ -25,17 +25,28 @@ docker compose up -d postgres keycloak
 Attendre que Keycloak soit prêt (`curl http://localhost:8080/realms/moelan` doit
 répondre 200 après quelques secondes).
 
-### 2. Créer un compte utilisateur dans Keycloak
+### 2. Créer un compte super-admin dans Keycloak
 
-Le realm importé (`infra/keycloak/realm-export.json`) ne contient volontairement
-aucun utilisateur (pour ne pas versionner de mots de passe). À faire une fois :
+L'app est **multi-espaces** : chaque équipe a sa propre caisse noire ("espace"),
+créée en self-service par n'importe quel compte Keycloak puis validée par un
+**super-admin** (l'opérateur de l'instance — vous). Le realm importé
+(`infra/keycloak/realm-export.json`) ne contient volontairement aucun
+utilisateur (pour ne pas versionner de mots de passe). À faire une fois, pour
+vous donner ce rôle :
 
 1. Ouvrir http://localhost:8080/admin (admin / changeme, ou les valeurs de `.env`)
-2. Réaliser (Realm settings) → sélectionner le realm **moelan**
-3. Users → Add user : renseigner un username, cocher "Email verified", enregistrer
+2. Sélectionner le realm **moelan**
+3. Users → Add user : renseigner un username/email, cocher "Email verified", enregistrer
 4. Onglet **Credentials** → Set password (décocher "Temporary")
-5. Onglet **Role mapping** → Assign role → cocher `admin` (pour accéder aux
-   réglages tarifs/amendes) ou `member` (accès standard)
+5. Onglet **Role mapping** → Assign role → cocher `superadmin`
+
+Un compte `superadmin` n'a pas besoin d'appartenir à un espace : il accède à
+l'écran "Espaces en attente" (icône bouclier dans la barre du haut) pour
+valider les nouveaux espaces créés en self-service (voir plus bas).
+
+Tout le monde d'autre (vous y compris, pour votre propre équipe) passe par
+**Register** sur l'écran de connexion Keycloak, puis par "Créer mon espace"
+dans l'app — pas besoin de créer ces comptes à la main.
 
 ### 3. Backend
 
@@ -45,11 +56,20 @@ DATABASE_URL="postgres://moelan:changeme@localhost:5432/app" \
 BIND_ADDR="127.0.0.1:8000" \
 KEYCLOAK_ISSUER_URL="http://localhost:8080/realms/moelan" \
 KEYCLOAK_AUDIENCE="moelan-api" \
+KEYCLOAK_SERVICE_CLIENT_SECRET="<voir ci-dessous>" \
 cargo run
 ```
 
 Les migrations (schéma + seed bière/soft/amendes) s'appliquent automatiquement
 au démarrage. Vérifier avec `curl http://localhost:8000/health`.
+
+`KEYCLOAK_SERVICE_CLIENT_SECRET` est le secret du client confidentiel
+`moelan-api-service` (créé par l'import du realm, service account avec le
+rôle `realm-admin`) — le backend l'utilise pour créer les groupes Keycloak
+d'un nouvel espace et les comptes des joueurs invités. Le récupérer dans
+Keycloak : Clients → `moelan-api-service` → Credentials → Client secret. Sans
+cette variable, l'app démarre normalement mais "Créer mon espace" et "Donner
+un accès" échoueront.
 
 ### 4. Frontend
 
@@ -76,8 +96,13 @@ docker compose up --build -d
 Les 4 services démarrent dans l'ordre (healthchecks), l'API applique les
 migrations au boot. Puis, comme en développement :
 
-- Créer un compte utilisateur dans Keycloak (voir étape 2 ci-dessus,
+- Créer un compte super-admin dans Keycloak (voir étape 2 ci-dessus,
   `http://localhost:8080/admin`)
+- Récupérer le secret du client `moelan-api-service` (Clients →
+  `moelan-api-service` → Credentials) — impossible à connaître avant ce
+  premier démarrage puisque c'est l'import du realm qui crée ce client.
+  Le renseigner dans `.env` (`KEYCLOAK_SERVICE_CLIENT_SECRET`) puis
+  `docker compose up -d api` pour redémarrer l'API avec.
 - Ouvrir l'app sur http://localhost:8090
 
 ### Reverse proxy Traefik (optionnel)

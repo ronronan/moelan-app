@@ -167,7 +167,10 @@ class _Filters extends ConsumerWidget {
               value: selectedPlayerId,
               hint: const Text('Tous les joueurs'),
               items: [
-                const DropdownMenuItem(value: null, child: Text('Tous les joueurs')),
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('Tous les joueurs'),
+                ),
                 for (final p in players)
                   DropdownMenuItem(value: p.id, child: Text(p.fullName)),
               ],
@@ -180,7 +183,10 @@ class _Filters extends ConsumerWidget {
             value: selectedKind,
             hint: const Text('Tous les types'),
             items: [
-              const DropdownMenuItem(value: null, child: Text('Tous les types')),
+              const DropdownMenuItem(
+                value: null,
+                child: Text('Tous les types'),
+              ),
               for (final kind in TransactionKind.values)
                 DropdownMenuItem(value: kind, child: Text(_kindLabel(kind))),
             ],
@@ -245,7 +251,9 @@ class _HistoryTile extends StatelessWidget {
       trailing: Text(
         formatCents(transaction.amountCents),
         style: TextStyle(
-          color: positive ? Colors.green.shade700 : Theme.of(context).colorScheme.error,
+          color: positive
+              ? Colors.green.shade700
+              : Theme.of(context).colorScheme.error,
           fontWeight: FontWeight.bold,
         ),
       ),

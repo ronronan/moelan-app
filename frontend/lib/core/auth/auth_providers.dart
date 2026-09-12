@@ -53,8 +53,38 @@ final isAdminProvider = Provider<bool>((ref) {
   return ref.watch(currentRolesProvider).contains('admin');
 });
 
-/// False only for the (not yet issued, see M12) read-only `player` role —
-/// everyone else can record bière/soft/amende/crédit actions.
+/// False only for the read-only `player` role — everyone else can record
+/// bière/soft/amende/crédit actions.
 final canWriteProvider = Provider<bool>((ref) {
   return !ref.watch(currentRolesProvider).contains('player');
+});
+
+/// Realm-wide role, unrelated to any space — grants access to the
+/// cross-org space-approval screen.
+final isSuperAdminProvider = Provider<bool>((ref) {
+  return ref.watch(currentRolesProvider).contains('superadmin');
+});
+
+/// Keycloak `groups` claim (full group paths, e.g. `/org-<uuid>/admin`),
+/// read the same unverified way as `currentRolesProvider` — UI gating only.
+final currentGroupsProvider = Provider<List<String>>((ref) {
+  final accessToken = ref.watch(currentUserProvider).value?.token.accessToken;
+  if (accessToken == null) return const [];
+  final groups = _unverifiedJwtClaims(accessToken)['groups'];
+  if (groups is List) return groups.cast<String>();
+  return const [];
+});
+
+final _orgGroupPattern = RegExp(
+  r'^/org-([0-9a-fA-F-]{36})/(admin|member|player)$',
+);
+
+/// The single `/org-<uuid>/<role>` group this user belongs to, if any —
+/// null means the account hasn't created or been invited into a space yet.
+final currentOrgIdProvider = Provider<String?>((ref) {
+  for (final group in ref.watch(currentGroupsProvider)) {
+    final match = _orgGroupPattern.firstMatch(group);
+    if (match != null) return match.group(1);
+  }
+  return null;
 });

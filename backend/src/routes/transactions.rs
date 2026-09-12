@@ -5,7 +5,7 @@ use axum::{
 use sqlx::QueryBuilder;
 use uuid::Uuid;
 
-use crate::auth::{AdminUser, CurrentUser};
+use crate::auth::{AdminUser, OrgUser, WriterUser};
 use crate::db::models::{Transaction, TransactionKind};
 use crate::dto::{CreateAdjustment, CreateConsumption, CreateCredit, CreateFine, TransactionQuery};
 use crate::error::AppResult;
@@ -14,16 +14,17 @@ use crate::state::AppState;
 
 pub async fn create_consumption(
     State(state): State<AppState>,
-    user: CurrentUser,
+    writer: WriterUser,
     Path(player_id): Path<Uuid>,
     Json(body): Json<CreateConsumption>,
 ) -> AppResult<Json<Transaction>> {
     let tx = service::record_consumption(
         &state.pool,
+        writer.0.org_id,
         player_id,
         body.consumable_type_id,
         body.quantity,
-        &user.sub,
+        &writer.0.user.sub,
     )
     .await?;
     Ok(Json(tx))
@@ -31,16 +32,17 @@ pub async fn create_consumption(
 
 pub async fn create_fine(
     State(state): State<AppState>,
-    user: CurrentUser,
+    writer: WriterUser,
     Path(player_id): Path<Uuid>,
     Json(body): Json<CreateFine>,
 ) -> AppResult<Json<Transaction>> {
     let tx = service::record_fine(
         &state.pool,
+        writer.0.org_id,
         player_id,
         body.fine_type_id,
         body.note,
-        &user.sub,
+        &writer.0.user.sub,
     )
     .await?;
     Ok(Json(tx))
@@ -48,16 +50,17 @@ pub async fn create_fine(
 
 pub async fn create_credit(
     State(state): State<AppState>,
-    user: CurrentUser,
+    writer: WriterUser,
     Path(player_id): Path<Uuid>,
     Json(body): Json<CreateCredit>,
 ) -> AppResult<Json<Transaction>> {
     let tx = service::record_credit(
         &state.pool,
+        writer.0.org_id,
         player_id,
         body.amount_cents,
         body.note,
-        &user.sub,
+        &writer.0.user.sub,
     )
     .await?;
     Ok(Json(tx))
@@ -71,10 +74,11 @@ pub async fn create_adjustment(
 ) -> AppResult<Json<Transaction>> {
     let tx = service::record_adjustment(
         &state.pool,
+        admin.0.org_id,
         player_id,
         body.amount_cents,
         body.note,
-        &admin.0.sub,
+        &admin.0.user.sub,
     )
     .await?;
     Ok(Json(tx))
@@ -82,7 +86,7 @@ pub async fn create_adjustment(
 
 pub async fn list_player_transactions(
     State(state): State<AppState>,
-    _user: CurrentUser,
+    org: OrgUser,
     Path(player_id): Path<Uuid>,
     Query(query): Query<TransactionQuery>,
 ) -> AppResult<Json<Vec<Transaction>>> {
@@ -90,14 +94,15 @@ pub async fn list_player_transactions(
     let transactions = sqlx::query_as!(
         Transaction,
         r#"
-        SELECT id, player_id, kind AS "kind: TransactionKind", amount_cents, quantity,
+        SELECT id, organization_id, player_id, kind AS "kind: TransactionKind", amount_cents, quantity,
                unit_price_cents, consumable_type_id, fine_type_id, note, created_by, created_at
         FROM transactions
-        WHERE player_id = $1
+        WHERE player_id = $1 AND organization_id = $2
         ORDER BY created_at DESC
-        LIMIT $2 OFFSET $3
+        LIMIT $3 OFFSET $4
         "#,
         player_id,
+        org.org_id,
         limit,
         offset,
     )
@@ -108,16 +113,17 @@ pub async fn list_player_transactions(
 
 pub async fn list_transactions(
     State(state): State<AppState>,
-    _user: CurrentUser,
+    org: OrgUser,
     Query(query): Query<TransactionQuery>,
 ) -> AppResult<Json<Vec<Transaction>>> {
     let (limit, offset) = paginate(&query);
 
     let mut builder = QueryBuilder::new(
-        r#"SELECT id, player_id, kind, amount_cents, quantity, unit_price_cents,
+        r#"SELECT id, organization_id, player_id, kind, amount_cents, quantity, unit_price_cents,
                   consumable_type_id, fine_type_id, note, created_by, created_at
-           FROM transactions WHERE 1 = 1"#,
+           FROM transactions WHERE organization_id = "#,
     );
+    builder.push_bind(org.org_id);
     if let Some(player_id) = query.player_id {
         builder.push(" AND player_id = ").push_bind(player_id);
     }

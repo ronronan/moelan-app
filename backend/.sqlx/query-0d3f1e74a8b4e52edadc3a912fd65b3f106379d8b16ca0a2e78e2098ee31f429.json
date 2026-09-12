@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM fine_types ORDER BY label",
+  "query": "UPDATE players SET email = $1, updated_at = now() WHERE id = $2 RETURNING *",
   "describe": {
     "columns": [
       {
@@ -9,41 +9,41 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "fine_types",
+            "table": "players",
             "name": "id"
           }
         }
       },
       {
         "ordinal": 1,
-        "name": "code",
+        "name": "first_name",
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "fine_types",
-            "name": "code"
+            "table": "players",
+            "name": "first_name"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "label",
+        "name": "last_name",
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "fine_types",
-            "name": "label"
+            "table": "players",
+            "name": "last_name"
           }
         }
       },
       {
         "ordinal": 3,
-        "name": "amount_cents",
+        "name": "balance_cents",
         "type_info": "Int8",
         "origin": {
           "Table": {
-            "table": "fine_types",
-            "name": "amount_cents"
+            "table": "players",
+            "name": "balance_cents"
           }
         }
       },
@@ -53,7 +53,7 @@
         "type_info": "Bool",
         "origin": {
           "Table": {
-            "table": "fine_types",
+            "table": "players",
             "name": "active"
           }
         }
@@ -64,7 +64,7 @@
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "fine_types",
+            "table": "players",
             "name": "created_at"
           }
         }
@@ -75,14 +75,39 @@
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "fine_types",
+            "table": "players",
             "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "organization_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "players",
+            "name": "organization_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "players",
+            "name": "email"
           }
         }
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
     },
     "nullable": [
       false,
@@ -91,8 +116,10 @@
       false,
       false,
       false,
-      false
+      false,
+      false,
+      true
     ]
   },
-  "hash": "eb2db48f7c8016198c2ef7ddd9d1a4996708e2b3a9020b99b0e913b7a9b0912d"
+  "hash": "0d3f1e74a8b4e52edadc3a912fd65b3f106379d8b16ca0a2e78e2098ee31f429"
 }

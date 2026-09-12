@@ -7,8 +7,10 @@ use crate::error::{AppError, AppResult};
 /// Single choke point for every balance-affecting write: inserts the ledger
 /// row and updates the cached `players.balance_cents` atomically, so the
 /// cache can never drift from the ledger that is the actual source of truth.
+#[allow(clippy::too_many_arguments)]
 async fn insert_and_apply(
     pool: &PgPool,
+    org_id: Uuid,
     player_id: Uuid,
     kind: TransactionKind,
     amount_cents: i64,
@@ -21,9 +23,12 @@ async fn insert_and_apply(
 ) -> AppResult<Transaction> {
     let mut tx = pool.begin().await?;
 
+    // Scoped by organization_id too: even if a caller somehow got hold of a
+    // player_id from another space, this can't touch it.
     let player_exists = sqlx::query_scalar!(
-        "SELECT id FROM players WHERE id = $1 AND active = true FOR UPDATE",
-        player_id
+        "SELECT id FROM players WHERE id = $1 AND organization_id = $2 AND active = true FOR UPDATE",
+        player_id,
+        org_id,
     )
     .fetch_optional(&mut *tx)
     .await?;
@@ -35,11 +40,12 @@ async fn insert_and_apply(
         Transaction,
         r#"
         INSERT INTO transactions
-            (player_id, kind, amount_cents, quantity, unit_price_cents, consumable_type_id, fine_type_id, note, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING id, player_id, kind AS "kind: TransactionKind", amount_cents, quantity,
+            (organization_id, player_id, kind, amount_cents, quantity, unit_price_cents, consumable_type_id, fine_type_id, note, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id, organization_id, player_id, kind AS "kind: TransactionKind", amount_cents, quantity,
                   unit_price_cents, consumable_type_id, fine_type_id, note, created_by, created_at
         "#,
+        org_id,
         player_id,
         kind as TransactionKind,
         amount_cents,
@@ -67,6 +73,7 @@ async fn insert_and_apply(
 
 pub async fn record_consumption(
     pool: &PgPool,
+    org_id: Uuid,
     player_id: Uuid,
     consumable_type_id: Uuid,
     quantity: i32,
@@ -77,8 +84,9 @@ pub async fn record_consumption(
     }
 
     let consumable = sqlx::query!(
-        "SELECT code, price_cents FROM consumable_types WHERE id = $1 AND active = true",
-        consumable_type_id
+        "SELECT code, price_cents FROM consumable_types WHERE id = $1 AND organization_id = $2 AND active = true",
+        consumable_type_id,
+        org_id,
     )
     .fetch_optional(pool)
     .await?
@@ -100,6 +108,7 @@ pub async fn record_consumption(
 
     insert_and_apply(
         pool,
+        org_id,
         player_id,
         kind,
         amount_cents,
@@ -115,14 +124,16 @@ pub async fn record_consumption(
 
 pub async fn record_fine(
     pool: &PgPool,
+    org_id: Uuid,
     player_id: Uuid,
     fine_type_id: Uuid,
     note: Option<String>,
     created_by: &str,
 ) -> AppResult<Transaction> {
     let fine = sqlx::query!(
-        "SELECT amount_cents FROM fine_types WHERE id = $1 AND active = true",
-        fine_type_id
+        "SELECT amount_cents FROM fine_types WHERE id = $1 AND organization_id = $2 AND active = true",
+        fine_type_id,
+        org_id,
     )
     .fetch_optional(pool)
     .await?
@@ -130,6 +141,7 @@ pub async fn record_fine(
 
     insert_and_apply(
         pool,
+        org_id,
         player_id,
         TransactionKind::Fine,
         -fine.amount_cents,
@@ -145,6 +157,7 @@ pub async fn record_fine(
 
 pub async fn record_credit(
     pool: &PgPool,
+    org_id: Uuid,
     player_id: Uuid,
     amount_cents: i64,
     note: Option<String>,
@@ -156,6 +169,7 @@ pub async fn record_credit(
 
     insert_and_apply(
         pool,
+        org_id,
         player_id,
         TransactionKind::Credit,
         amount_cents,
@@ -171,6 +185,7 @@ pub async fn record_credit(
 
 pub async fn record_adjustment(
     pool: &PgPool,
+    org_id: Uuid,
     player_id: Uuid,
     amount_cents: i64,
     note: String,
@@ -178,6 +193,7 @@ pub async fn record_adjustment(
 ) -> AppResult<Transaction> {
     insert_and_apply(
         pool,
+        org_id,
         player_id,
         TransactionKind::ManualAdjustment,
         amount_cents,
@@ -203,9 +219,17 @@ mod tests {
             .expect("failed to connect to test database")
     }
 
-    async fn create_test_player(pool: &PgPool, label: &str) -> Uuid {
+    async fn moelan_org_id(pool: &PgPool) -> Uuid {
+        sqlx::query_scalar!("SELECT id FROM organizations WHERE slug = 'moelan'")
+            .fetch_one(pool)
+            .await
+            .expect("seed data must contain the default 'moelan' organization")
+    }
+
+    async fn create_test_player(pool: &PgPool, org_id: Uuid, label: &str) -> Uuid {
         sqlx::query_scalar!(
-            "INSERT INTO players (first_name, last_name) VALUES ($1, 'Test') RETURNING id",
+            "INSERT INTO players (organization_id, first_name, last_name) VALUES ($1, $2, 'Test') RETURNING id",
+            org_id,
             label
         )
         .fetch_one(pool)
@@ -219,26 +243,31 @@ mod tests {
     #[tokio::test]
     async fn balance_matches_sum_of_ledger_after_mixed_actions() {
         let pool = test_pool().await;
-        let player_id = create_test_player(&pool, "balance-sum-check").await;
+        let org_id = moelan_org_id(&pool).await;
+        let player_id = create_test_player(&pool, org_id, "balance-sum-check").await;
 
-        let beer_id: Uuid =
-            sqlx::query_scalar!("SELECT id FROM consumable_types WHERE code = 'beer'")
-                .fetch_one(&pool)
-                .await
-                .expect("seed data must contain a 'beer' consumable type");
-        let fine_id: Uuid =
-            sqlx::query_scalar!("SELECT id FROM fine_types WHERE code = 'red_card'")
-                .fetch_one(&pool)
-                .await
-                .expect("seed data must contain a 'red_card' fine type");
+        let beer_id: Uuid = sqlx::query_scalar!(
+            "SELECT id FROM consumable_types WHERE organization_id = $1 AND code = 'beer'",
+            org_id
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("seed data must contain a 'beer' consumable type");
+        let fine_id: Uuid = sqlx::query_scalar!(
+            "SELECT id FROM fine_types WHERE organization_id = $1 AND code = 'red_card'",
+            org_id
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("seed data must contain a 'red_card' fine type");
 
-        record_credit(&pool, player_id, 2000, None, "test")
+        record_credit(&pool, org_id, player_id, 2000, None, "test")
             .await
             .expect("credit should succeed");
-        record_consumption(&pool, player_id, beer_id, 2, "test")
+        record_consumption(&pool, org_id, player_id, beer_id, 2, "test")
             .await
             .expect("consumption should succeed");
-        record_fine(&pool, player_id, fine_id, None, "test")
+        record_fine(&pool, org_id, player_id, fine_id, None, "test")
             .await
             .expect("fine should succeed");
 
@@ -270,15 +299,17 @@ mod tests {
     #[tokio::test]
     async fn action_on_unknown_player_returns_not_found() {
         let pool = test_pool().await;
-        let result = record_credit(&pool, Uuid::new_v4(), 100, None, "test").await;
+        let org_id = moelan_org_id(&pool).await;
+        let result = record_credit(&pool, org_id, Uuid::new_v4(), 100, None, "test").await;
         assert!(matches!(result, Err(AppError::NotFound)));
     }
 
     #[tokio::test]
     async fn negative_credit_amount_is_rejected() {
         let pool = test_pool().await;
-        let player_id = create_test_player(&pool, "negative-credit-check").await;
-        let result = record_credit(&pool, player_id, -100, None, "test").await;
+        let org_id = moelan_org_id(&pool).await;
+        let player_id = create_test_player(&pool, org_id, "negative-credit-check").await;
+        let result = record_credit(&pool, org_id, player_id, -100, None, "test").await;
         assert!(matches!(result, Err(AppError::BadRequest(_))));
     }
 }

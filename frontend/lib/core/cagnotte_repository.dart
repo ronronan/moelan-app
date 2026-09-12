@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/consumable_type.dart';
 import '../models/fine_type.dart';
+import '../models/me_status.dart';
+import '../models/organization.dart';
 import '../models/player.dart';
 import '../models/transaction.dart';
 import 'api_client.dart';
+import 'auth/auth_providers.dart';
 
 /// Talks to every `/api/*` route: players, consumable/fine type config, and
 /// the actions (consumptions/fines/credits) that write to the ledger.
@@ -45,11 +48,7 @@ class CagnotteRepository {
   }) async {
     final res = await _dio.patch(
       '/api/consumable-types/$id',
-      data: {
-        'price_cents': ?priceCents,
-        'label': ?label,
-        'active': ?active,
-      },
+      data: {'price_cents': ?priceCents, 'label': ?label, 'active': ?active},
     );
     return ConsumableType.fromJson(res.data);
   }
@@ -59,7 +58,11 @@ class CagnotteRepository {
     return (res.data as List).map((e) => FineType.fromJson(e)).toList();
   }
 
-  Future<FineType> createFineType(String code, String label, int amountCents) async {
+  Future<FineType> createFineType(
+    String code,
+    String label,
+    int amountCents,
+  ) async {
     final res = await _dio.post(
       '/api/fine-types',
       data: {'code': code, 'label': label, 'amount_cents': amountCents},
@@ -75,16 +78,15 @@ class CagnotteRepository {
   }) async {
     final res = await _dio.patch(
       '/api/fine-types/$id',
-      data: {
-        'amount_cents': ?amountCents,
-        'label': ?label,
-        'active': ?active,
-      },
+      data: {'amount_cents': ?amountCents, 'label': ?label, 'active': ?active},
     );
     return FineType.fromJson(res.data);
   }
 
-  Future<Transaction> recordConsumption(String playerId, String consumableTypeId) async {
+  Future<Transaction> recordConsumption(
+    String playerId,
+    String consumableTypeId,
+  ) async {
     final res = await _dio.post(
       '/api/players/$playerId/consumptions',
       data: {'consumable_type_id': consumableTypeId},
@@ -92,7 +94,11 @@ class CagnotteRepository {
     return Transaction.fromJson(res.data);
   }
 
-  Future<Transaction> recordFine(String playerId, String fineTypeId, {String? note}) async {
+  Future<Transaction> recordFine(
+    String playerId,
+    String fineTypeId, {
+    String? note,
+  }) async {
     final res = await _dio.post(
       '/api/players/$playerId/fines',
       data: {'fine_type_id': fineTypeId, 'note': ?note},
@@ -100,7 +106,11 @@ class CagnotteRepository {
     return Transaction.fromJson(res.data);
   }
 
-  Future<Transaction> recordCredit(String playerId, int amountCents, {String? note}) async {
+  Future<Transaction> recordCredit(
+    String playerId,
+    int amountCents, {
+    String? note,
+  }) async {
     final res = await _dio.post(
       '/api/players/$playerId/credits',
       data: {'amount_cents': amountCents, 'note': ?note},
@@ -111,6 +121,40 @@ class CagnotteRepository {
   Future<List<Transaction>> listPlayerTransactions(String playerId) async {
     final res = await _dio.get('/api/players/$playerId/transactions');
     return (res.data as List).map((e) => Transaction.fromJson(e)).toList();
+  }
+
+  Future<Player> invitePlayer(String playerId, String email) async {
+    final res = await _dio.post(
+      '/api/players/$playerId/invite',
+      data: {'email': email},
+    );
+    return Player.fromJson(res.data);
+  }
+
+  Future<MeStatus> getMeStatus() async {
+    final res = await _dio.get('/api/me');
+    return MeStatus.fromJson(res.data);
+  }
+
+  Future<Organization> createOrganization(
+    String name,
+    String contactEmail,
+  ) async {
+    final res = await _dio.post(
+      '/api/organizations',
+      data: {'name': name, 'contact_email': contactEmail},
+    );
+    return Organization.fromJson(res.data);
+  }
+
+  Future<List<Organization>> listPendingOrganizations() async {
+    final res = await _dio.get('/api/organizations/pending');
+    return (res.data as List).map((e) => Organization.fromJson(e)).toList();
+  }
+
+  Future<Organization> approveOrganization(String id) async {
+    final res = await _dio.patch('/api/organizations/$id/approve');
+    return Organization.fromJson(res.data);
   }
 
   Future<List<Transaction>> listTransactions({
@@ -138,4 +182,13 @@ class CagnotteRepository {
 
 final cagnotteRepositoryProvider = Provider<CagnotteRepository>((ref) {
   return CagnotteRepository(ref.watch(apiClientProvider));
+});
+
+/// Null while logged out (there's nothing to fetch yet); refetches whenever
+/// the signed-in user changes, e.g. after a token refresh picks up newly
+/// granted group membership (see `create_organization_screen.dart`).
+final meStatusProvider = FutureProvider<MeStatus?>((ref) async {
+  final user = ref.watch(currentUserProvider).value;
+  if (user == null) return null;
+  return ref.watch(cagnotteRepositoryProvider).getMeStatus();
 });

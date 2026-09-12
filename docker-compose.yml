@@ -57,6 +57,9 @@ services:
       KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL:-http://localhost:8080/realms/moelan}
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/moelan
       KEYCLOAK_AUDIENCE: moelan-api
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-moelan}
+      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-moelan-api-service}
+      KEYCLOAK_SERVICE_CLIENT_SECRET: ${KEYCLOAK_SERVICE_CLIENT_SECRET:-}
       RUST_LOG: info
     ports:
       - "8000:8000"

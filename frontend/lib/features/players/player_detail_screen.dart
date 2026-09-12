@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/auth_providers.dart';
 import '../../core/cagnotte_repository.dart';
 import '../../core/format.dart';
 import '../../models/consumable_type.dart';
 import '../../models/fine_type.dart';
+import '../../models/player.dart';
 import '../../models/transaction.dart';
 import 'players_providers.dart';
 
@@ -18,6 +20,8 @@ class PlayerDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final playerAsync = ref.watch(playerDetailProvider(playerId));
+    final canWrite = ref.watch(canWriteProvider);
+    final isAdmin = ref.watch(isAdminProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -53,9 +57,18 @@ class PlayerDetailScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              _ActionButtons(playerId: playerId),
-              const SizedBox(height: 24),
-              Text('Historique récent', style: Theme.of(context).textTheme.titleMedium),
+              if (canWrite) ...[
+                _ActionButtons(playerId: playerId),
+                const SizedBox(height: 24),
+              ],
+              if (isAdmin) ...[
+                _InviteButton(playerId: playerId, player: player),
+                const SizedBox(height: 24),
+              ],
+              Text(
+                'Historique récent',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               _RecentTransactions(playerId: playerId),
             ],
           );
@@ -84,28 +97,36 @@ class _ActionButtons extends ConsumerWidget {
             final beer = types.where((t) => t.code == 'beer').firstOrNull;
             return _ActionButton(
               icon: Icons.sports_bar,
-              label: beer == null ? 'Bière' : 'Bière (${formatCents(beer.priceCents)})',
+              label: beer == null
+                  ? 'Bière'
+                  : 'Bière (${formatCents(beer.priceCents)})',
               onPressed: beer == null
                   ? null
                   : () => _recordConsumption(context, ref, beer),
             );
           },
-          loading: () => const _ActionButton(icon: Icons.sports_bar, label: 'Bière'),
-          error: (_, _) => const _ActionButton(icon: Icons.sports_bar, label: 'Bière'),
+          loading: () =>
+              const _ActionButton(icon: Icons.sports_bar, label: 'Bière'),
+          error: (_, _) =>
+              const _ActionButton(icon: Icons.sports_bar, label: 'Bière'),
         ),
         consumablesAsync.when(
           data: (types) {
             final soft = types.where((t) => t.code == 'soft').firstOrNull;
             return _ActionButton(
               icon: Icons.local_drink,
-              label: soft == null ? 'Soft' : 'Soft (${formatCents(soft.priceCents)})',
+              label: soft == null
+                  ? 'Soft'
+                  : 'Soft (${formatCents(soft.priceCents)})',
               onPressed: soft == null
                   ? null
                   : () => _recordConsumption(context, ref, soft),
             );
           },
-          loading: () => const _ActionButton(icon: Icons.local_drink, label: 'Soft'),
-          error: (_, _) => const _ActionButton(icon: Icons.local_drink, label: 'Soft'),
+          loading: () =>
+              const _ActionButton(icon: Icons.local_drink, label: 'Soft'),
+          error: (_, _) =>
+              const _ActionButton(icon: Icons.local_drink, label: 'Soft'),
         ),
         _ActionButton(
           icon: Icons.gavel,
@@ -126,7 +147,9 @@ class _ActionButtons extends ConsumerWidget {
     WidgetRef ref,
     ConsumableType consumable,
   ) async {
-    await ref.read(cagnotteRepositoryProvider).recordConsumption(playerId, consumable.id);
+    await ref
+        .read(cagnotteRepositoryProvider)
+        .recordConsumption(playerId, consumable.id);
     invalidatePlayerData(ref, playerId);
   }
 
@@ -143,7 +166,10 @@ class _ActionButtons extends ConsumerWidget {
           children: [
             const Padding(
               padding: EdgeInsets.all(16),
-              child: Text('Choisir une amende', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(
+                'Choisir une amende',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
             for (final fine in active)
               ListTile(
@@ -157,7 +183,9 @@ class _ActionButtons extends ConsumerWidget {
     );
 
     if (selected == null) return;
-    await ref.read(cagnotteRepositoryProvider).recordFine(playerId, selected.id);
+    await ref
+        .read(cagnotteRepositoryProvider)
+        .recordFine(playerId, selected.id);
     invalidatePlayerData(ref, playerId);
   }
 
@@ -175,7 +203,9 @@ class _ActionButtons extends ConsumerWidget {
             TextField(
               controller: amountController,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(labelText: 'Montant (€)'),
             ),
             TextField(
@@ -206,14 +236,79 @@ class _ActionButtons extends ConsumerWidget {
         .recordCredit(
           playerId,
           (euros * 100).round(),
-          note: noteController.text.trim().isEmpty ? null : noteController.text.trim(),
+          note: noteController.text.trim().isEmpty
+              ? null
+              : noteController.text.trim(),
         );
     invalidatePlayerData(ref, playerId);
   }
 }
 
+/// Gives the player their own read-only login (see M12's `player` role).
+/// Most players never get one — this is opt-in per player, and re-showable
+/// (relabeled) once they already have an email on file, to resend it.
+class _InviteButton extends ConsumerWidget {
+  const _InviteButton({required this.playerId, required this.player});
+
+  final String playerId;
+  final Player player;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: TextButton.icon(
+        onPressed: () => _showInviteDialog(context, ref),
+        icon: const Icon(Icons.person_add_alt),
+        label: Text(
+          player.email == null
+              ? 'Donner un accès'
+              : 'Ré-inviter (${player.email})',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showInviteDialog(BuildContext context, WidgetRef ref) async {
+    final emailController = TextEditingController(text: player.email ?? '');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Donner un accès au joueur'),
+        content: TextField(
+          controller: emailController,
+          autofocus: true,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(labelText: 'Email'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Envoyer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    final email = emailController.text.trim();
+    if (email.isEmpty) return;
+
+    await ref.read(cagnotteRepositoryProvider).invitePlayer(playerId, email);
+    invalidatePlayerData(ref, playerId);
+  }
+}
+
 class _ActionButton extends StatelessWidget {
-  const _ActionButton({required this.icon, required this.label, this.onPressed});
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    this.onPressed,
+  });
 
   final IconData icon;
   final String label;
@@ -255,7 +350,8 @@ class _RecentTransactions extends ConsumerWidget {
         }
         return Column(
           children: [
-            for (final tx in transactions.take(10)) _TransactionTile(transaction: tx),
+            for (final tx in transactions.take(10))
+              _TransactionTile(transaction: tx),
           ],
         );
       },

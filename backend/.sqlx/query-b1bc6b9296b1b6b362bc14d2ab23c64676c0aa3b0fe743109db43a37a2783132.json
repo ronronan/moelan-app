@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO transactions\n            (player_id, kind, amount_cents, quantity, unit_price_cents, consumable_type_id, fine_type_id, note, created_by)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n        RETURNING id, player_id, kind AS \"kind: TransactionKind\", amount_cents, quantity,\n                  unit_price_cents, consumable_type_id, fine_type_id, note, created_by, created_at\n        ",
+  "query": "\n        INSERT INTO transactions\n            (organization_id, player_id, kind, amount_cents, quantity, unit_price_cents, consumable_type_id, fine_type_id, note, created_by)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n        RETURNING id, organization_id, player_id, kind AS \"kind: TransactionKind\", amount_cents, quantity,\n                  unit_price_cents, consumable_type_id, fine_type_id, note, created_by, created_at\n        ",
   "describe": {
     "columns": [
       {
@@ -16,6 +16,17 @@
       },
       {
         "ordinal": 1,
+        "name": "organization_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transactions",
+            "name": "organization_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "player_id",
         "type_info": "Uuid",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "kind: TransactionKind",
         "type_info": {
           "Custom": {
@@ -50,7 +61,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "amount_cents",
         "type_info": "Int8",
         "origin": {
@@ -61,7 +72,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "quantity",
         "type_info": "Int4",
         "origin": {
@@ -72,7 +83,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "unit_price_cents",
         "type_info": "Int8",
         "origin": {
@@ -83,7 +94,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "consumable_type_id",
         "type_info": "Uuid",
         "origin": {
@@ -94,7 +105,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "fine_type_id",
         "type_info": "Uuid",
         "origin": {
@@ -105,7 +116,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "note",
         "type_info": "Text",
         "origin": {
@@ -116,7 +127,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "created_by",
         "type_info": "Text",
         "origin": {
@@ -127,7 +138,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -140,6 +151,7 @@
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Uuid",
         {
           "Custom": {
@@ -170,6 +182,7 @@
       false,
       false,
       false,
+      false,
       true,
       true,
       true,
@@ -178,5 +191,5 @@
       false
     ]
   },
-  "hash": "5c2c04aa285dc1f990b53e17ba5fa17f0c9c372247018c3b0f78bae6f32f0cf2"
+  "hash": "b1bc6b9296b1b6b362bc14d2ab23c64676c0aa3b0fe743109db43a37a2783132"
 }

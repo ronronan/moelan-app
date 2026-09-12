@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM players WHERE id = $1 AND active = true FOR UPDATE",
+  "query": "SELECT approved FROM organizations WHERE id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
-        "type_info": "Uuid",
+        "name": "approved",
+        "type_info": "Bool",
         "origin": {
           "Table": {
-            "table": "players",
-            "name": "id"
+            "table": "organizations",
+            "name": "approved"
           }
         }
       }
@@ -24,5 +24,5 @@
       false
     ]
   },
-  "hash": "648dbde6ad12104ee35fafd380a39de964e770369e0740daf81f442d71de5a61"
+  "hash": "7213745fd5845d2d5f3b1f1d0206b6b1d4623f53e8ec554d0b6d6567476994d9"
 }

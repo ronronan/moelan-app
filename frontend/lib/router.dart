@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/auth/auth_providers.dart';
+import 'core/cagnotte_repository.dart';
 import 'features/auth/login_screen.dart';
 import 'features/history/history_screen.dart';
+import 'features/organizations/create_organization_screen.dart';
+import 'features/organizations/pending_approval_screen.dart';
+import 'features/organizations/superadmin_organizations_screen.dart';
 import 'features/players/dashboard_screen.dart';
 import 'features/players/player_detail_screen.dart';
 import 'features/settings/settings_screen.dart';
@@ -16,6 +20,7 @@ class _RouterRefresh extends ChangeNotifier {
   _RouterRefresh(Ref ref) {
     ref.listen(oidcInitProvider, (_, _) => notifyListeners());
     ref.listen(currentUserProvider, (_, _) => notifyListeners());
+    ref.listen(meStatusProvider, (_, _) => notifyListeners());
   }
 }
 
@@ -39,21 +44,60 @@ final routerProvider = Provider<GoRouter>((ref) {
       final onLogin = state.matchedLocation == '/login';
       if (!loggedIn && !onLogin) return '/login';
       if (loggedIn && onLogin) return '/';
+      if (!loggedIn) return null;
+
+      // A super-admin doesn't need a space of their own to be useful (their
+      // job is approving other people's) — they're exempt from the
+      // create-space/pending gate below and reach the approval screen via
+      // the dashboard's AppBar icon instead. If they *do* have a space of
+      // their own, it behaves like anyone else's.
+      if (ref.read(isSuperAdminProvider)) return null;
+
+      final meStatus = ref.read(meStatusProvider);
+      if (!meStatus.hasValue) return null;
+      final organization = meStatus.value?.organization;
+
+      final onCreateOrg = state.matchedLocation == '/create-organization';
+      final onPending = state.matchedLocation == '/pending-approval';
+
+      if (organization == null) {
+        return onCreateOrg ? null : '/create-organization';
+      }
+      if (!organization.approved) {
+        return onPending ? null : '/pending-approval';
+      }
+      if (onCreateOrg || onPending) return '/';
       return null;
     },
     routes: [
       GoRoute(path: '/', builder: (context, state) => const DashboardScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
+        path: '/create-organization',
+        builder: (context, state) => const CreateOrganizationScreen(),
+      ),
+      GoRoute(
+        path: '/pending-approval',
+        builder: (context, state) => const PendingApprovalScreen(),
+      ),
+      GoRoute(
+        path: '/superadmin/organizations',
+        builder: (context, state) => const SuperAdminOrganizationsScreen(),
+      ),
+      GoRoute(
         path: '/players/:id',
         builder: (context, state) =>
             PlayerDetailScreen(playerId: state.pathParameters['id']!),
       ),
-      GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsScreen(),
+      ),
       GoRoute(
         path: '/history',
-        builder: (context, state) =>
-            HistoryScreen(initialPlayerId: state.uri.queryParameters['playerId']),
+        builder: (context, state) => HistoryScreen(
+          initialPlayerId: state.uri.queryParameters['playerId'],
+        ),
       ),
     ],
   );

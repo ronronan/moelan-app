@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE players SET\n            first_name = COALESCE($1, first_name),\n            last_name = COALESCE($2, last_name),\n            active = COALESCE($3, active),\n            updated_at = now()\n        WHERE id = $4\n        RETURNING *\n        ",
+  "query": "INSERT INTO players (organization_id, first_name, last_name) VALUES ($1, $2, $3) RETURNING *",
   "describe": {
     "columns": [
       {
@@ -79,14 +79,35 @@
             "name": "updated_at"
           }
         }
+      },
+      {
+        "ordinal": 7,
+        "name": "organization_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "players",
+            "name": "organization_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "players",
+            "name": "email"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Text",
-        "Text",
-        "Bool",
-        "Uuid"
+        "Text"
       ]
     },
     "nullable": [
@@ -96,8 +117,10 @@
       false,
       false,
       false,
-      false
+      false,
+      false,
+      true
     ]
   },
-  "hash": "2a56f333d500ba303d9651b35b706b2de884e0f8c9004064a84de22fc58f35a4"
+  "hash": "e9fd86a5ca492399202db0880af8e19838e52984fbf64e33515972d42a102b8f"
 }

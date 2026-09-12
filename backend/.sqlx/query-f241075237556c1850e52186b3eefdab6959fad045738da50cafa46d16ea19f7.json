@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM players ORDER BY last_name, first_name",
+  "query": "\n        UPDATE players SET\n            first_name = COALESCE($1, first_name),\n            last_name = COALESCE($2, last_name),\n            active = COALESCE($3, active),\n            updated_at = now()\n        WHERE id = $4 AND organization_id = $5\n        RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -79,10 +79,38 @@
             "name": "updated_at"
           }
         }
+      },
+      {
+        "ordinal": 7,
+        "name": "organization_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "players",
+            "name": "organization_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "players",
+            "name": "email"
+          }
+        }
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Text",
+        "Text",
+        "Bool",
+        "Uuid",
+        "Uuid"
+      ]
     },
     "nullable": [
       false,
@@ -91,8 +119,10 @@
       false,
       false,
       false,
-      false
+      false,
+      false,
+      true
     ]
   },
-  "hash": "32edaab5fb86fa03f3f755a53a5548b7873ad1fc64a9f1b20bc5926c37eea884"
+  "hash": "f241075237556c1850e52186b3eefdab6959fad045738da50cafa46d16ea19f7"
 }

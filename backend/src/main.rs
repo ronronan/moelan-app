@@ -36,8 +36,13 @@ async fn main() {
         config.keycloak_issuer_url.clone(),
         config.keycloak_audience.clone(),
     ));
+    let keycloak_admin = Arc::new(services::keycloak_admin::KeycloakAdmin::new(&config));
 
-    let state = AppState { pool, jwt };
+    let state = AppState {
+        pool,
+        jwt,
+        keycloak_admin,
+    };
     let app = routes::build_router(state);
 
     let listener = tokio::net::TcpListener::bind(&config.bind_addr)

@@ -18,7 +18,10 @@ class SettingsScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Réglages'),
           bottom: const TabBar(
-            tabs: [Tab(text: 'Tarifs'), Tab(text: "Types d'amendes")],
+            tabs: [
+              Tab(text: 'Tarifs'),
+              Tab(text: "Types d'amendes"),
+            ],
           ),
         ),
         body: const TabBarView(
@@ -156,7 +159,9 @@ class _FineTypesTab extends ConsumerWidget {
               ),
               TextField(
                 controller: amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: const InputDecoration(labelText: 'Montant (€)'),
               ),
               SwitchListTile(
@@ -183,7 +188,8 @@ class _FineTypesTab extends ConsumerWidget {
 
     if (confirmed != true) return;
     final euros = double.tryParse(amountController.text.replaceAll(',', '.'));
-    if (euros == null || euros < 0 || labelController.text.trim().isEmpty) return;
+    if (euros == null || euros < 0 || labelController.text.trim().isEmpty)
+      return;
 
     await ref
         .read(cagnotteRepositoryProvider)
@@ -220,7 +226,9 @@ class _FineTypesTab extends ConsumerWidget {
             ),
             TextField(
               controller: amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(labelText: 'Montant (€)'),
             ),
           ],

@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,18 @@ import '../../core/format.dart';
 import '../../models/consumable_type.dart';
 import '../../models/player.dart';
 import 'players_providers.dart';
+
+/// Machine-readable slug the backend attaches to a handful of 403s (see
+/// `AppError::code` in the Rust backend) — lets a super-admin without a
+/// space of their own see a helpful message instead of a raw error, without
+/// the router forcibly redirecting everyone through the create-space flow.
+String? _errorCode(Object error) {
+  if (error is DioException) {
+    final data = error.response?.data;
+    if (data is Map && data['code'] is String) return data['code'] as String;
+  }
+  return null;
+}
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -52,17 +65,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final playersAsync = ref.watch(playersListProvider);
     final canWrite = ref.watch(canWriteProvider);
     final isAdmin = ref.watch(isAdminProvider);
+    final isSuperAdmin = ref.watch(isSuperAdminProvider);
     final selectionMode = _selected.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(selectionMode ? '${_selected.length} sélectionné(s)' : 'Moelan App'),
+        title: Text(
+          selectionMode ? '${_selected.length} sélectionné(s)' : 'Moelan App',
+        ),
         leading: selectionMode
-            ? IconButton(icon: const Icon(Icons.close), onPressed: _clearSelection)
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _clearSelection,
+              )
             : null,
         actions: selectionMode
             ? null
             : [
+                if (isSuperAdmin)
+                  IconButton(
+                    icon: const Icon(Icons.verified_user),
+                    tooltip: 'Espaces en attente',
+                    onPressed: () => context.push('/superadmin/organizations'),
+                  ),
                 if (isAdmin)
                   IconButton(
                     icon: const Icon(Icons.settings),
@@ -85,7 +110,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
       body: playersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Erreur : $err')),
+        error: (err, _) {
+          final code = _errorCode(err);
+          if (code == 'no_organization') {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text("Ce compte n'appartient à aucun espace."),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () => context.push('/create-organization'),
+                      child: const Text('Créer un espace'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          if (code == 'org_pending') {
+            return const Center(
+              child: Text('Espace en attente de validation.'),
+            );
+          }
+          return Center(child: Text('Erreur : $err'));
+        },
         data: (players) {
           final total = players.fold<int>(0, (sum, p) => sum + p.balanceCents);
           return RefreshIndicator(
@@ -113,7 +164,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           );
         },
       ),
-      bottomNavigationBar: selectionMode ? _BulkActionBar(busy: _busy, onDebit: _bulkDebit) : null,
+      bottomNavigationBar: selectionMode
+          ? _BulkActionBar(busy: _busy, onDebit: _bulkDebit)
+          : null,
       floatingActionButton: isAdmin && !selectionMode
           ? FloatingActionButton(
               onPressed: () => _showAddPlayerDialog(context, ref),
@@ -160,13 +213,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
 
     if (created != true) return;
-    if (firstNameController.text.trim().isEmpty || lastNameController.text.trim().isEmpty) {
+    if (firstNameController.text.trim().isEmpty ||
+        lastNameController.text.trim().isEmpty) {
       return;
     }
 
     await ref
         .read(cagnotteRepositoryProvider)
-        .createPlayer(firstNameController.text.trim(), lastNameController.text.trim());
+        .createPlayer(
+          firstNameController.text.trim(),
+          lastNameController.text.trim(),
+        );
     ref.invalidate(playersListProvider);
   }
 }
@@ -230,7 +287,10 @@ class _CagnotteHeader extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          Text('Cagnotte totale', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Cagnotte totale',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 4),
           Text(
             formatCents(totalCents),

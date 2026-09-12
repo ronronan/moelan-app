@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM players WHERE id = $1",
+  "query": "SELECT * FROM players WHERE organization_id = $1 AND active = $2 ORDER BY last_name, first_name",
   "describe": {
     "columns": [
       {
@@ -79,11 +79,34 @@
             "name": "updated_at"
           }
         }
+      },
+      {
+        "ordinal": 7,
+        "name": "organization_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "players",
+            "name": "organization_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "players",
+            "name": "email"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Bool"
       ]
     },
     "nullable": [
@@ -93,8 +116,10 @@
       false,
       false,
       false,
-      false
+      false,
+      false,
+      true
     ]
   },
-  "hash": "4bc0b809793a7c6cb255672052cb221dddbf6732180bec4430d5a898260fef9b"
+  "hash": "1c5a2050cf146e394997075edc988a7450ced5c27375678163f777143afa16a9"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT id, player_id, kind AS \"kind: TransactionKind\", amount_cents, quantity,\n               unit_price_cents, consumable_type_id, fine_type_id, note, created_by, created_at\n        FROM transactions\n        WHERE player_id = $1\n        ORDER BY created_at DESC\n        LIMIT $2 OFFSET $3\n        ",
+  "query": "\n        SELECT id, organization_id, player_id, kind AS \"kind: TransactionKind\", amount_cents, quantity,\n               unit_price_cents, consumable_type_id, fine_type_id, note, created_by, created_at\n        FROM transactions\n        WHERE player_id = $1 AND organization_id = $2\n        ORDER BY created_at DESC\n        LIMIT $3 OFFSET $4\n        ",
   "describe": {
     "columns": [
       {
@@ -16,6 +16,17 @@
       },
       {
         "ordinal": 1,
+        "name": "organization_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transactions",
+            "name": "organization_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "player_id",
         "type_info": "Uuid",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "kind: TransactionKind",
         "type_info": {
           "Custom": {
@@ -50,7 +61,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "amount_cents",
         "type_info": "Int8",
         "origin": {
@@ -61,7 +72,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "quantity",
         "type_info": "Int4",
         "origin": {
@@ -72,7 +83,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "unit_price_cents",
         "type_info": "Int8",
         "origin": {
@@ -83,7 +94,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "consumable_type_id",
         "type_info": "Uuid",
         "origin": {
@@ -94,7 +105,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "fine_type_id",
         "type_info": "Uuid",
         "origin": {
@@ -105,7 +116,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "note",
         "type_info": "Text",
         "origin": {
@@ -116,7 +127,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "created_by",
         "type_info": "Text",
         "origin": {
@@ -127,7 +138,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -141,11 +152,13 @@
     "parameters": {
       "Left": [
         "Uuid",
+        "Uuid",
         "Int8",
         "Int8"
       ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -159,5 +172,5 @@
       false
     ]
   },
-  "hash": "f8b634d79ca7895f5a83e7bcf63e82f3dc27eb4db07fc08bb55175cca46f1680"
+  "hash": "ada06b56ad232e05b85f961d06f5fcd119e9f03ef7761f01ccfea5ef1d26342d"
 }

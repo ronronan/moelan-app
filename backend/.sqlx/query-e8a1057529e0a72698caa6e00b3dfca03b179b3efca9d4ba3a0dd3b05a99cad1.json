@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM players WHERE active = $1 ORDER BY last_name, first_name",
+  "query": "\n        UPDATE fine_types SET\n            label = COALESCE($1, label),\n            amount_cents = COALESCE($2, amount_cents),\n            active = COALESCE($3, active),\n            updated_at = now()\n        WHERE id = $4 AND organization_id = $5\n        RETURNING *\n        ",
   "describe": {
     "columns": [
       {
@@ -9,41 +9,41 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "players",
+            "table": "fine_types",
             "name": "id"
           }
         }
       },
       {
         "ordinal": 1,
-        "name": "first_name",
+        "name": "code",
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "players",
-            "name": "first_name"
+            "table": "fine_types",
+            "name": "code"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "last_name",
+        "name": "label",
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "players",
-            "name": "last_name"
+            "table": "fine_types",
+            "name": "label"
           }
         }
       },
       {
         "ordinal": 3,
-        "name": "balance_cents",
+        "name": "amount_cents",
         "type_info": "Int8",
         "origin": {
           "Table": {
-            "table": "players",
-            "name": "balance_cents"
+            "table": "fine_types",
+            "name": "amount_cents"
           }
         }
       },
@@ -53,7 +53,7 @@
         "type_info": "Bool",
         "origin": {
           "Table": {
-            "table": "players",
+            "table": "fine_types",
             "name": "active"
           }
         }
@@ -64,7 +64,7 @@
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "players",
+            "table": "fine_types",
             "name": "created_at"
           }
         }
@@ -75,15 +75,30 @@
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "players",
+            "table": "fine_types",
             "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "organization_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "fine_types",
+            "name": "organization_id"
           }
         }
       }
     ],
     "parameters": {
       "Left": [
-        "Bool"
+        "Text",
+        "Int8",
+        "Bool",
+        "Uuid",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -93,8 +108,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "0b5cb05e101caa0171c819531ec204b958aff3b1365f04ce4182a15574c895d7"
+  "hash": "e8a1057529e0a72698caa6e00b3dfca03b179b3efca9d4ba3a0dd3b05a99cad1"
 }

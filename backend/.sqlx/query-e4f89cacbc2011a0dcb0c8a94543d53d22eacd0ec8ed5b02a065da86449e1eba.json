@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO players (first_name, last_name) VALUES ($1, $2) RETURNING *",
+  "query": "SELECT * FROM players WHERE organization_id = $1 ORDER BY last_name, first_name",
   "describe": {
     "columns": [
       {
@@ -79,12 +79,33 @@
             "name": "updated_at"
           }
         }
+      },
+      {
+        "ordinal": 7,
+        "name": "organization_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "players",
+            "name": "organization_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "players",
+            "name": "email"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -94,8 +115,10 @@
       false,
       false,
       false,
-      false
+      false,
+      false,
+      true
     ]
   },
-  "hash": "0fb41823793b9bb34d7376d505105389663d8d0186163f0cd02197a423e06b7b"
+  "hash": "e4f89cacbc2011a0dcb0c8a94543d53d22eacd0ec8ed5b02a065da86449e1eba"
 }

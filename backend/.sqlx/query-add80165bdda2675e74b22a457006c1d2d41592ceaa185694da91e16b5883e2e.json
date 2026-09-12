@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE fine_types SET\n            label = COALESCE($1, label),\n            amount_cents = COALESCE($2, amount_cents),\n            active = COALESCE($3, active),\n            updated_at = now()\n        WHERE id = $4\n        RETURNING *\n        ",
+  "query": "SELECT * FROM consumable_types WHERE organization_id = $1 ORDER BY code",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "fine_types",
+            "table": "consumable_types",
             "name": "id"
           }
         }
@@ -20,7 +20,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "fine_types",
+            "table": "consumable_types",
             "name": "code"
           }
         }
@@ -31,19 +31,19 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "fine_types",
+            "table": "consumable_types",
             "name": "label"
           }
         }
       },
       {
         "ordinal": 3,
-        "name": "amount_cents",
+        "name": "price_cents",
         "type_info": "Int8",
         "origin": {
           "Table": {
-            "table": "fine_types",
-            "name": "amount_cents"
+            "table": "consumable_types",
+            "name": "price_cents"
           }
         }
       },
@@ -53,7 +53,7 @@
         "type_info": "Bool",
         "origin": {
           "Table": {
-            "table": "fine_types",
+            "table": "consumable_types",
             "name": "active"
           }
         }
@@ -64,7 +64,7 @@
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "fine_types",
+            "table": "consumable_types",
             "name": "created_at"
           }
         }
@@ -75,17 +75,25 @@
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
-            "table": "fine_types",
+            "table": "consumable_types",
             "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "organization_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "consumable_types",
+            "name": "organization_id"
           }
         }
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Int8",
-        "Bool",
         "Uuid"
       ]
     },
@@ -96,8 +104,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "d68eb71faadfc516a5d6e5584d8e107b8d62447f9b89b3e8d44d768866624c42"
+  "hash": "add80165bdda2675e74b22a457006c1d2d41592ceaa185694da91e16b5883e2e"
 }

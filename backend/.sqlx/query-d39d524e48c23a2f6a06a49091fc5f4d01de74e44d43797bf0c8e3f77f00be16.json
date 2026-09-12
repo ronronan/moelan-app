@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT amount_cents FROM fine_types WHERE id = $1 AND active = true",
+  "query": "SELECT amount_cents FROM fine_types WHERE id = $1 AND organization_id = $2 AND active = true",
   "describe": {
     "columns": [
       {
@@ -17,6 +17,7 @@
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Uuid"
       ]
     },
@@ -24,5 +25,5 @@
       false
     ]
   },
-  "hash": "bd0dc04ab6f3122abfa5787b47158affa8b3b75ae414c7076491493aca58295a"
+  "hash": "d39d524e48c23a2f6a06a49091fc5f4d01de74e44d43797bf0c8e3f77f00be16"
 }

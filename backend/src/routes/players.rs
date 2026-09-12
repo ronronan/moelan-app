@@ -5,9 +5,9 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::auth::{AdminUser, CurrentUser};
+use crate::auth::{AdminUser, OrgUser};
 use crate::db::models::Player;
-use crate::dto::PatchPlayer;
+use crate::dto::{InvitePlayer, PatchPlayer};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -18,14 +18,15 @@ pub struct ListPlayersQuery {
 
 pub async fn list_players(
     State(state): State<AppState>,
-    _user: CurrentUser,
+    org: OrgUser,
     Query(query): Query<ListPlayersQuery>,
 ) -> AppResult<Json<Vec<Player>>> {
     let players = match query.active {
         Some(active) => {
             sqlx::query_as!(
                 Player,
-                "SELECT * FROM players WHERE active = $1 ORDER BY last_name, first_name",
+                "SELECT * FROM players WHERE organization_id = $1 AND active = $2 ORDER BY last_name, first_name",
+                org.org_id,
                 active
             )
             .fetch_all(&state.pool)
@@ -34,7 +35,8 @@ pub async fn list_players(
         None => {
             sqlx::query_as!(
                 Player,
-                "SELECT * FROM players ORDER BY last_name, first_name"
+                "SELECT * FROM players WHERE organization_id = $1 ORDER BY last_name, first_name",
+                org.org_id
             )
             .fetch_all(&state.pool)
             .await?
@@ -45,12 +47,13 @@ pub async fn list_players(
 
 pub async fn create_player(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Json(body): Json<crate::dto::CreatePlayer>,
 ) -> AppResult<Json<Player>> {
     let player = sqlx::query_as!(
         Player,
-        "INSERT INTO players (first_name, last_name) VALUES ($1, $2) RETURNING *",
+        "INSERT INTO players (organization_id, first_name, last_name) VALUES ($1, $2, $3) RETURNING *",
+        admin.0.org_id,
         body.first_name,
         body.last_name,
     )
@@ -61,19 +64,24 @@ pub async fn create_player(
 
 pub async fn get_player(
     State(state): State<AppState>,
-    _user: CurrentUser,
+    org: OrgUser,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Player>> {
-    let player = sqlx::query_as!(Player, "SELECT * FROM players WHERE id = $1", id)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or(AppError::NotFound)?;
+    let player = sqlx::query_as!(
+        Player,
+        "SELECT * FROM players WHERE id = $1 AND organization_id = $2",
+        id,
+        org.org_id
+    )
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(AppError::NotFound)?;
     Ok(Json(player))
 }
 
 pub async fn patch_player(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
     Json(body): Json<PatchPlayer>,
 ) -> AppResult<Json<Player>> {
@@ -85,16 +93,61 @@ pub async fn patch_player(
             last_name = COALESCE($2, last_name),
             active = COALESCE($3, active),
             updated_at = now()
-        WHERE id = $4
+        WHERE id = $4 AND organization_id = $5
         RETURNING *
         "#,
         body.first_name,
         body.last_name,
         body.active,
         id,
+        admin.0.org_id,
     )
     .fetch_optional(&state.pool)
     .await?
     .ok_or(AppError::NotFound)?;
     Ok(Json(player))
+}
+
+/// Gives a player their own read-only login: creates a Keycloak account for
+/// them (in the org's `player` group) and stamps their email onto the row.
+/// Most players never get one — this is opt-in per player.
+pub async fn invite_player(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<InvitePlayer>,
+) -> AppResult<Json<Player>> {
+    let player = sqlx::query_as!(
+        Player,
+        "SELECT * FROM players WHERE id = $1 AND organization_id = $2",
+        id,
+        admin.0.org_id
+    )
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    let player_group_id = state
+        .keycloak_admin
+        .find_group_id(admin.0.org_id, "player")
+        .await?;
+    state
+        .keycloak_admin
+        .create_user_with_temp_password(
+            &body.email,
+            &player.first_name,
+            &player.last_name,
+            &player_group_id,
+        )
+        .await?;
+
+    let updated = sqlx::query_as!(
+        Player,
+        "UPDATE players SET email = $1, updated_at = now() WHERE id = $2 RETURNING *",
+        body.email,
+        id,
+    )
+    .fetch_one(&state.pool)
+    .await?;
+    Ok(Json(updated))
 }

@@ -2,6 +2,7 @@ pub mod consumable_types;
 pub mod fine_types;
 pub mod health;
 pub mod me;
+pub mod organizations;
 pub mod players;
 pub mod transactions;
 
@@ -18,6 +19,18 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health", get(health::health))
         .route("/api/me", get(me::me))
         .route(
+            "/api/organizations",
+            post(organizations::create_organization),
+        )
+        .route(
+            "/api/organizations/pending",
+            get(organizations::list_pending_organizations),
+        )
+        .route(
+            "/api/organizations/{id}/approve",
+            patch(organizations::approve_organization),
+        )
+        .route(
             "/api/players",
             get(players::list_players).post(players::create_player),
         )
@@ -25,6 +38,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/players/{id}",
             get(players::get_player).patch(players::patch_player),
         )
+        .route("/api/players/{id}/invite", post(players::invite_player))
         .route(
             "/api/players/{id}/consumptions",
             post(transactions::create_consumption),

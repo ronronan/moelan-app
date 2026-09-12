@@ -65,6 +65,17 @@ pub struct CreateAdjustment {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct CreateOrganization {
+    pub name: String,
+    pub contact_email: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InvitePlayer {
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct TransactionQuery {
     pub player_id: Option<Uuid>,
     pub kind: Option<String>,

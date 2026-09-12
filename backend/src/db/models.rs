@@ -16,8 +16,11 @@ pub enum TransactionKind {
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
 pub struct Player {
     pub id: Uuid,
+    #[serde(skip_serializing)]
+    pub organization_id: Uuid,
     pub first_name: String,
     pub last_name: String,
+    pub email: Option<String>,
     pub balance_cents: i64,
     pub active: bool,
     pub created_at: DateTime<Utc>,
@@ -27,6 +30,8 @@ pub struct Player {
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
 pub struct ConsumableType {
     pub id: Uuid,
+    #[serde(skip_serializing)]
+    pub organization_id: Uuid,
     pub code: String,
     pub label: String,
     pub price_cents: i64,
@@ -38,6 +43,8 @@ pub struct ConsumableType {
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
 pub struct FineType {
     pub id: Uuid,
+    #[serde(skip_serializing)]
+    pub organization_id: Uuid,
     pub code: String,
     pub label: String,
     pub amount_cents: i64,
@@ -49,6 +56,8 @@ pub struct FineType {
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
 pub struct Transaction {
     pub id: Uuid,
+    #[serde(skip_serializing)]
+    pub organization_id: Uuid,
     pub player_id: Uuid,
     pub kind: TransactionKind,
     pub amount_cents: i64,
@@ -59,4 +68,19 @@ pub struct Transaction {
     pub note: Option<String>,
     pub created_by: String,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
+pub struct Organization {
+    pub id: Uuid,
+    pub name: String,
+    pub slug: String,
+    pub contact_email: String,
+    pub approved: bool,
+    pub target_cents: Option<i64>,
+    pub debt_alert_threshold_cents: Option<i64>,
+    #[serde(skip_serializing)]
+    pub created_by: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }

@@ -1,0 +1,120 @@
+use axum::{
+    Json,
+    extract::{Path, State},
+};
+use uuid::Uuid;
+
+use crate::auth::{CurrentUser, SuperAdminUser};
+use crate::db::models::Organization;
+use crate::dto::CreateOrganization;
+use crate::error::{AppError, AppResult};
+use crate::state::AppState;
+
+/// Turns a space's display name into a URL/group-safe slug
+/// ("Les Handballeurs Fous !" -> "les-handballeurs-fous").
+fn slugify(name: &str) -> String {
+    let mut slug = String::new();
+    let mut last_was_dash = true; // swallow a would-be leading dash
+    for c in name.to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c);
+            last_was_dash = false;
+        } else if !last_was_dash {
+            slug.push('-');
+            last_was_dash = true;
+        }
+    }
+    let trimmed = slug.trim_end_matches('-');
+    if trimmed.is_empty() {
+        "espace".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Self-service space creation: any authenticated Keycloak account with no
+/// existing org can create one. The new space starts `approved = false`
+/// (see `0003_organizations.sql`) — a super-admin must validate it before
+/// anyone in it can touch real data (`OrgUser` extractor enforces that).
+pub async fn create_organization(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Json(body): Json<CreateOrganization>,
+) -> AppResult<Json<Organization>> {
+    if user.org_id.is_some() {
+        return Err(AppError::BadRequest(
+            "account already belongs to an organization".into(),
+        ));
+    }
+    let name = body.name.trim();
+    let contact_email = body.contact_email.trim();
+    if name.is_empty() || contact_email.is_empty() {
+        return Err(AppError::BadRequest(
+            "name and contact_email are required".into(),
+        ));
+    }
+
+    let base_slug = slugify(name);
+    let mut slug = base_slug.clone();
+    let mut attempt = 1;
+    let org = loop {
+        let result = sqlx::query_as!(
+            Organization,
+            "INSERT INTO organizations (name, slug, contact_email, created_by) VALUES ($1, $2, $3, $4) RETURNING *",
+            name,
+            slug,
+            contact_email,
+            user.sub,
+        )
+        .fetch_one(&state.pool)
+        .await;
+
+        match result {
+            Ok(org) => break org,
+            Err(sqlx::Error::Database(db_err))
+                if db_err.constraint() == Some("organizations_slug_key") =>
+            {
+                attempt += 1;
+                slug = format!("{base_slug}-{attempt}");
+            }
+            Err(err) => return Err(err.into()),
+        }
+    };
+
+    let group_ids = state.keycloak_admin.create_org_groups(org.id).await?;
+    state
+        .keycloak_admin
+        .add_user_to_group(&user.sub, &group_ids.admin_group_id)
+        .await?;
+
+    Ok(Json(org))
+}
+
+pub async fn list_pending_organizations(
+    State(state): State<AppState>,
+    _super_admin: SuperAdminUser,
+) -> AppResult<Json<Vec<Organization>>> {
+    let orgs = sqlx::query_as!(
+        Organization,
+        "SELECT * FROM organizations WHERE approved = false ORDER BY created_at"
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(orgs))
+}
+
+pub async fn approve_organization(
+    State(state): State<AppState>,
+    _super_admin: SuperAdminUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Organization>> {
+    let org = sqlx::query_as!(
+        Organization,
+        "UPDATE organizations SET approved = true, updated_at = now() WHERE id = $1 RETURNING *",
+        id
+    )
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(AppError::NotFound)?;
+    Ok(Json(org))
+}
