@@ -139,11 +139,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         },
         data: (players) {
           final total = players.fold<int>(0, (sum, p) => sum + p.balanceCents);
+          final targetCents = ref
+              .watch(meStatusProvider)
+              .value
+              ?.organization
+              ?.targetCents;
           return RefreshIndicator(
             onRefresh: () => ref.refresh(playersListProvider.future),
             child: ListView(
               children: [
-                _CagnotteHeader(totalCents: total),
+                _CagnotteHeader(totalCents: total, targetCents: targetCents),
                 const Divider(height: 1),
                 if (players.isEmpty)
                   const Padding(
@@ -277,12 +282,21 @@ class _BulkActionBar extends ConsumerWidget {
 }
 
 class _CagnotteHeader extends StatelessWidget {
-  const _CagnotteHeader({required this.totalCents});
+  const _CagnotteHeader({required this.totalCents, this.targetCents});
 
   final int totalCents;
+  final int? targetCents;
 
   @override
   Widget build(BuildContext context) {
+    final target = targetCents;
+    // A negative or zero objective can't be filled — treat it the same as
+    // "no objective set" rather than showing a nonsensical bar.
+    final showProgress = target != null && target > 0;
+    final progress = showProgress
+        ? (totalCents / target).clamp(0, 1).toDouble()
+        : 0.0;
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -301,6 +315,18 @@ class _CagnotteHeader extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           const Text('Direction Moelan-sur-Mer 🌊'),
+          if (showProgress) ...[
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(value: progress, minHeight: 8),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "${(progress * 100).round()} % de l'objectif (${formatCents(target)})",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ],
       ),
     );

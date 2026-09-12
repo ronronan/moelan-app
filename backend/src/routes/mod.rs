@@ -23,6 +23,10 @@ pub fn build_router(state: AppState) -> Router {
             post(organizations::create_organization),
         )
         .route(
+            "/api/organizations/me",
+            patch(organizations::patch_my_organization),
+        )
+        .route(
             "/api/organizations/pending",
             get(organizations::list_pending_organizations),
         )

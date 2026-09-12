@@ -13,7 +13,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Réglages'),
@@ -21,13 +21,98 @@ class SettingsScreen extends StatelessWidget {
             tabs: [
               Tab(text: 'Tarifs'),
               Tab(text: "Types d'amendes"),
+              Tab(text: 'Trésorerie'),
             ],
           ),
         ),
         body: const TabBarView(
-          children: [_ConsumableTypesTab(), _FineTypesTab()],
+          children: [_ConsumableTypesTab(), _FineTypesTab(), _TreasuryTab()],
         ),
       ),
+    );
+  }
+}
+
+class _TreasuryTab extends ConsumerStatefulWidget {
+  const _TreasuryTab();
+
+  @override
+  ConsumerState<_TreasuryTab> createState() => _TreasuryTabState();
+}
+
+class _TreasuryTabState extends ConsumerState<_TreasuryTab> {
+  final _controller = TextEditingController();
+  bool _busy = false;
+  bool _initialized = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final text = _controller.text.trim();
+    int? targetCents;
+    if (text.isNotEmpty) {
+      final euros = double.tryParse(text.replaceAll(',', '.'));
+      if (euros == null || euros <= 0) return;
+      targetCents = (euros * 100).round();
+    }
+
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(cagnotteRepositoryProvider)
+          .patchMyOrganizationTarget(targetCents);
+      ref.invalidate(meStatusProvider);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final meStatusAsync = ref.watch(meStatusProvider);
+
+    return meStatusAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => Center(child: Text('Erreur : $err')),
+      data: (status) {
+        final targetCents = status?.organization?.targetCents;
+        if (!_initialized) {
+          _initialized = true;
+          if (targetCents != null) {
+            _controller.text = (targetCents / 100).toStringAsFixed(2);
+          }
+        }
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Objectif de remplissage de la cagnotte, affiché en barre de "
+                'progression sur le tableau de bord. Laisser vide pour ne '
+                "fixer aucun objectif.",
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _controller,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Objectif (€)'),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: _busy ? null : _save,
+                child: const Text('Enregistrer'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

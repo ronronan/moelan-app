@@ -4,9 +4,9 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::auth::{CurrentUser, SuperAdminUser};
+use crate::auth::{AdminUser, CurrentUser, SuperAdminUser};
 use crate::db::models::Organization;
-use crate::dto::CreateOrganization;
+use crate::dto::{CreateOrganization, PatchOrganization};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -101,6 +101,24 @@ pub async fn list_pending_organizations(
     .fetch_all(&state.pool)
     .await?;
     Ok(Json(orgs))
+}
+
+/// Lets an org admin set (or clear) the treasury's fill objective, shown as
+/// a progress bar on the dashboard against the current balance.
+pub async fn patch_my_organization(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Json(body): Json<PatchOrganization>,
+) -> AppResult<Json<Organization>> {
+    let org = sqlx::query_as!(
+        Organization,
+        "UPDATE organizations SET target_cents = $1, updated_at = now() WHERE id = $2 RETURNING *",
+        body.target_cents,
+        admin.0.org_id,
+    )
+    .fetch_one(&state.pool)
+    .await?;
+    Ok(Json(org))
 }
 
 pub async fn approve_organization(
