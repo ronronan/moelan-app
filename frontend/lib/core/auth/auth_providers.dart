@@ -52,3 +52,9 @@ final currentRolesProvider = Provider<List<String>>((ref) {
 final isAdminProvider = Provider<bool>((ref) {
   return ref.watch(currentRolesProvider).contains('admin');
 });
+
+/// False only for the (not yet issued, see M12) read-only `player` role —
+/// everyone else can record bière/soft/amende/crédit actions.
+final canWriteProvider = Provider<bool>((ref) {
+  return !ref.watch(currentRolesProvider).contains('player');
+});

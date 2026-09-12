@@ -9,7 +9,14 @@ class MoelanApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo);
+    // A desaturated, mid-tone green (not the saturated Colors.green, which
+    // gives too-low contrast text on a light surface) — Material 3 derives
+    // the full accessible tonal palette (onPrimary, container colors, etc.)
+    // from this single seed, in both light and dark mode.
+    final theme = ThemeData(
+      useMaterial3: true,
+      colorSchemeSeed: const Color(0xFF2E7D5B),
+    );
     final oidcInit = ref.watch(oidcInitProvider);
 
     if (oidcInit.isLoading) {

@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,40 +6,82 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_providers.dart';
 import '../../core/cagnotte_repository.dart';
 import '../../core/format.dart';
+import '../../models/consumable_type.dart';
 import '../../models/player.dart';
 import 'players_providers.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  final Set<String> _selected = {};
+  bool _busy = false;
+
+  void _toggleSelected(String playerId) {
+    setState(() {
+      if (!_selected.add(playerId)) _selected.remove(playerId);
+    });
+  }
+
+  void _clearSelection() => setState(_selected.clear);
+
+  Future<void> _bulkDebit(ConsumableType consumable) async {
+    setState(() => _busy = true);
+    final repo = ref.read(cagnotteRepositoryProvider);
+    try {
+      for (final playerId in _selected) {
+        await repo.recordConsumption(playerId, consumable.id);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _selected.clear();
+        });
+        ref.invalidate(playersListProvider);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final playersAsync = ref.watch(playersListProvider);
+    final canWrite = ref.watch(canWriteProvider);
     final isAdmin = ref.watch(isAdminProvider);
+    final selectionMode = _selected.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Moelan App'),
-        actions: [
-          if (isAdmin)
-            IconButton(
-              icon: const Icon(Icons.settings),
-              tooltip: 'Réglages',
-              onPressed: () => context.push('/settings'),
-            ),
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: 'Historique',
-            onPressed: () => context.push('/history'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Se déconnecter',
-            onPressed: () async {
-              await ref.read(oidcManagerProvider).logout();
-            },
-          ),
-        ],
+        title: Text(selectionMode ? '${_selected.length} sélectionné(s)' : 'Moelan App'),
+        leading: selectionMode
+            ? IconButton(icon: const Icon(Icons.close), onPressed: _clearSelection)
+            : null,
+        actions: selectionMode
+            ? null
+            : [
+                if (isAdmin)
+                  IconButton(
+                    icon: const Icon(Icons.settings),
+                    tooltip: 'Réglages',
+                    onPressed: () => context.push('/settings'),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.history),
+                  tooltip: 'Historique',
+                  onPressed: () => context.push('/history'),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.logout),
+                  tooltip: 'Se déconnecter',
+                  onPressed: () async {
+                    await ref.read(oidcManagerProvider).logout();
+                  },
+                ),
+              ],
       ),
       body: playersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -57,13 +100,21 @@ class DashboardScreen extends ConsumerWidget {
                     child: Center(child: Text('Aucun joueur pour le moment.')),
                   )
                 else
-                  for (final player in players) _PlayerTile(player: player),
+                  for (final player in players)
+                    _PlayerTile(
+                      player: player,
+                      selectable: canWrite,
+                      selected: _selected.contains(player.id),
+                      selectionMode: selectionMode,
+                      onToggle: () => _toggleSelected(player.id),
+                    ),
               ],
             ),
           );
         },
       ),
-      floatingActionButton: isAdmin
+      bottomNavigationBar: selectionMode ? _BulkActionBar(busy: _busy, onDebit: _bulkDebit) : null,
+      floatingActionButton: isAdmin && !selectionMode
           ? FloatingActionButton(
               onPressed: () => _showAddPlayerDialog(context, ref),
               tooltip: 'Ajouter un joueur',
@@ -120,6 +171,54 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
+/// Shown instead of the AppBar actions once ≥1 player is selected: one tap
+/// applies a bière/soft debit to every selected player at once. No bulk
+/// endpoint on the API — the volume for a single team is trivial, so a
+/// sequential loop of the existing per-player call is simpler than adding
+/// one.
+class _BulkActionBar extends ConsumerWidget {
+  const _BulkActionBar({required this.busy, required this.onDebit});
+
+  final bool busy;
+  final void Function(ConsumableType consumable) onDebit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final consumablesAsync = ref.watch(consumableTypesProvider);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: consumablesAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Text('Erreur : $err'),
+          data: (types) {
+            final beer = types.where((t) => t.code == 'beer').firstOrNull;
+            final soft = types.where((t) => t.code == 'soft').firstOrNull;
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (beer != null)
+                  FilledButton.icon(
+                    onPressed: busy ? null : () => onDebit(beer),
+                    icon: const Icon(Icons.sports_bar),
+                    label: Text('Bière (${formatCents(beer.priceCents)})'),
+                  ),
+                const SizedBox(width: 12),
+                if (soft != null)
+                  FilledButton.icon(
+                    onPressed: busy ? null : () => onDebit(soft),
+                    icon: const Icon(Icons.local_drink),
+                    label: Text('Soft (${formatCents(soft.priceCents)})'),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
 class _CagnotteHeader extends StatelessWidget {
   const _CagnotteHeader({required this.totalCents});
 
@@ -149,14 +248,27 @@ class _CagnotteHeader extends StatelessWidget {
 }
 
 class _PlayerTile extends StatelessWidget {
-  const _PlayerTile({required this.player});
+  const _PlayerTile({
+    required this.player,
+    required this.selectable,
+    required this.selected,
+    required this.selectionMode,
+    required this.onToggle,
+  });
 
   final Player player;
+  final bool selectable;
+  final bool selected;
+  final bool selectionMode;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
     final negative = player.balanceCents < 0;
     return ListTile(
+      leading: selectable
+          ? Checkbox(value: selected, onChanged: (_) => onToggle())
+          : null,
       title: Text(player.fullName),
       trailing: Text(
         formatCents(player.balanceCents),
@@ -165,7 +277,15 @@ class _PlayerTile extends StatelessWidget {
           color: negative ? Theme.of(context).colorScheme.error : null,
         ),
       ),
-      onTap: () => context.push('/players/${player.id}'),
+      selected: selected,
+      onTap: () {
+        if (selectionMode) {
+          if (selectable) onToggle();
+        } else {
+          context.push('/players/${player.id}');
+        }
+      },
+      onLongPress: selectable ? onToggle : null,
     );
   }
 }
