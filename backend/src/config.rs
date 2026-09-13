@@ -11,6 +11,14 @@ pub struct Config {
     /// internal host as `keycloak_jwks_url`.
     pub keycloak_service_client_id: String,
     pub keycloak_service_client_secret: String,
+    /// SMTP is entirely optional: `smtp_host` unset means "don't send
+    /// email" rather than an error, so the app boots and runs fine without
+    /// a mail provider configured (debt alerts just get logged instead).
+    pub smtp_host: Option<String>,
+    pub smtp_port: u16,
+    pub smtp_username: String,
+    pub smtp_password: String,
+    pub smtp_from: String,
 }
 
 impl Config {
@@ -37,6 +45,14 @@ impl Config {
                 .unwrap_or_else(|_| "moelan-api-service".to_string()),
             keycloak_service_client_secret: std::env::var("KEYCLOAK_SERVICE_CLIENT_SECRET")
                 .unwrap_or_default(),
+            smtp_host: std::env::var("SMTP_HOST").ok().filter(|h| !h.is_empty()),
+            smtp_port: std::env::var("SMTP_PORT")
+                .ok()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(587),
+            smtp_username: std::env::var("SMTP_USERNAME").unwrap_or_default(),
+            smtp_password: std::env::var("SMTP_PASSWORD").unwrap_or_default(),
+            smtp_from: std::env::var("SMTP_FROM").unwrap_or_default(),
         }
     }
 }

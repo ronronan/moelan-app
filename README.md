@@ -105,6 +105,18 @@ migrations au boot. Puis, comme en développement :
   `docker compose up -d api` pour redémarrer l'API avec.
 - Ouvrir l'app sur http://localhost:8090
 
+### Alertes email de dette (SMTP)
+
+Un admin d'espace peut fixer, dans Réglages → Trésorerie, un seuil de dette :
+dès qu'un joueur passe sous ce montant, un email part vers l'adresse de
+contact de l'espace. L'envoi passe par un relais SMTP générique
+(`SMTP_HOST`/`PORT`/`USERNAME`/`PASSWORD`/`FROM` dans `.env`) — n'importe
+quel fournisseur qui expose du SMTP standard convient (Mailgun, Brevo,
+SendGrid...), pas de SDK propriétaire à intégrer. Tant que `SMTP_HOST` est
+vide, aucune erreur : les alertes sont simplement journalisées
+(`RUST_LOG=info`) au lieu d'être envoyées — pratique pour développer sans
+identifiants réels, à brancher plus tard.
+
 ### Reverse proxy Traefik (optionnel)
 
 Un reverse proxy Traefik peut regrouper web/API/Keycloak sous un seul nom

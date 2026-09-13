@@ -41,30 +41,49 @@ class _TreasuryTab extends ConsumerStatefulWidget {
 }
 
 class _TreasuryTabState extends ConsumerState<_TreasuryTab> {
-  final _controller = TextEditingController();
+  final _targetController = TextEditingController();
+  final _thresholdController = TextEditingController();
   bool _busy = false;
   bool _initialized = false;
 
   @override
   void dispose() {
-    _controller.dispose();
+    _targetController.dispose();
+    _thresholdController.dispose();
     super.dispose();
   }
 
+  /// Parses a euros field into cents, or null if blank. Returns
+  /// `(false, null)` on an invalid (non-blank, unparsable or negative)
+  /// value so the caller can bail out without saving.
+  (bool, int?) _parseEuros(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return (true, null);
+    final euros = double.tryParse(trimmed.replaceAll(',', '.'));
+    if (euros == null || euros <= 0) return (false, null);
+    return (true, (euros * 100).round());
+  }
+
   Future<void> _save() async {
-    final text = _controller.text.trim();
-    int? targetCents;
-    if (text.isNotEmpty) {
-      final euros = double.tryParse(text.replaceAll(',', '.'));
-      if (euros == null || euros <= 0) return;
-      targetCents = (euros * 100).round();
-    }
+    final (targetOk, targetCents) = _parseEuros(_targetController.text);
+    final (thresholdOk, thresholdEuros) = _parseEuros(
+      _thresholdController.text,
+    );
+    if (!targetOk || !thresholdOk) return;
+    // Stored as a negative cap in the backend (a debt *limit*); the field
+    // asks for a plain positive euro amount, which reads more naturally.
+    final debtAlertThresholdCents = thresholdEuros == null
+        ? null
+        : -thresholdEuros;
 
     setState(() => _busy = true);
     try {
       await ref
           .read(cagnotteRepositoryProvider)
-          .patchMyOrganizationTarget(targetCents);
+          .patchMyOrganization(
+            targetCents: targetCents,
+            debtAlertThresholdCents: debtAlertThresholdCents,
+          );
       ref.invalidate(meStatusProvider);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -80,10 +99,15 @@ class _TreasuryTabState extends ConsumerState<_TreasuryTab> {
       error: (err, _) => Center(child: Text('Erreur : $err')),
       data: (status) {
         final targetCents = status?.organization?.targetCents;
+        final thresholdCents = status?.organization?.debtAlertThresholdCents;
         if (!_initialized) {
           _initialized = true;
           if (targetCents != null) {
-            _controller.text = (targetCents / 100).toStringAsFixed(2);
+            _targetController.text = (targetCents / 100).toStringAsFixed(2);
+          }
+          if (thresholdCents != null) {
+            _thresholdController.text = (-thresholdCents / 100)
+                .toStringAsFixed(2);
           }
         }
         return Padding(
@@ -98,11 +122,27 @@ class _TreasuryTabState extends ConsumerState<_TreasuryTab> {
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: _controller,
+                controller: _targetController,
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
                 decoration: const InputDecoration(labelText: 'Objectif (€)'),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                "Seuil d'alerte de dette : un email est envoyé à l'adresse "
+                'de contact dès qu\'un joueur descend sous ce montant. '
+                'Laisser vide pour ne jamais alerter.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _thresholdController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: "Seuil d'alerte (€)",
+                ),
               ),
               const SizedBox(height: 16),
               FilledButton(

@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 use crate::db::models::{Transaction, TransactionKind};
 use crate::error::{AppError, AppResult};
+use crate::services::mail::Mailer;
 
 /// Single choke point for every balance-affecting write: inserts the ledger
 /// row and updates the cached `players.balance_cents` atomically, so the
@@ -10,6 +11,7 @@ use crate::error::{AppError, AppResult};
 #[allow(clippy::too_many_arguments)]
 async fn insert_and_apply(
     pool: &PgPool,
+    mailer: &Mailer,
     org_id: Uuid,
     player_id: Uuid,
     kind: TransactionKind,
@@ -24,17 +26,21 @@ async fn insert_and_apply(
     let mut tx = pool.begin().await?;
 
     // Scoped by organization_id too: even if a caller somehow got hold of a
-    // player_id from another space, this can't touch it.
-    let player_exists = sqlx::query_scalar!(
-        "SELECT id FROM players WHERE id = $1 AND organization_id = $2 AND active = true FOR UPDATE",
+    // player_id from another space, this can't touch it. Locked and read
+    // together so we know the balance this write is about to move away
+    // from, for the debt-alert crossing check below.
+    let player = sqlx::query!(
+        "SELECT id, first_name, last_name, balance_cents FROM players WHERE id = $1 AND organization_id = $2 AND active = true FOR UPDATE",
         player_id,
         org_id,
     )
     .fetch_optional(&mut *tx)
     .await?;
-    if player_exists.is_none() {
+    let Some(player) = player else {
         return Err(AppError::NotFound);
-    }
+    };
+    let old_balance = player.balance_cents;
+    let new_balance = old_balance + amount_cents;
 
     let transaction = sqlx::query_as!(
         Transaction,
@@ -68,11 +74,72 @@ async fn insert_and_apply(
     .await?;
 
     tx.commit().await?;
+
+    maybe_send_debt_alert(
+        pool,
+        mailer,
+        org_id,
+        old_balance,
+        new_balance,
+        &player.first_name,
+        &player.last_name,
+    )
+    .await;
+
     Ok(transaction)
+}
+
+/// Fires at most once per crossing: only when this write moves the balance
+/// from at-or-above the org's threshold to below it. A player already deep
+/// in debt doesn't get re-alerted on every subsequent beer — only when they
+/// first cross the line (or cross it again after recovering above it).
+/// Never fails the caller; a mail problem shouldn't roll back the write
+/// that triggered it (see `Mailer::send`).
+async fn maybe_send_debt_alert(
+    pool: &PgPool,
+    mailer: &Mailer,
+    org_id: Uuid,
+    old_balance: i64,
+    new_balance: i64,
+    first_name: &str,
+    last_name: &str,
+) {
+    let org = sqlx::query!(
+        "SELECT name, contact_email, debt_alert_threshold_cents FROM organizations WHERE id = $1",
+        org_id,
+    )
+    .fetch_optional(pool)
+    .await;
+    let Ok(Some(org)) = org else {
+        return;
+    };
+    let Some(threshold) = org.debt_alert_threshold_cents else {
+        return;
+    };
+    if !crosses_threshold(old_balance, new_balance, threshold) {
+        return;
+    }
+
+    let subject = format!("[{}] Seuil de dette dépassé", org.name);
+    let body = format!(
+        "{first_name} {last_name} est passé sous le seuil d'alerte ({:.2} €).\n\
+         Nouveau solde : {:.2} €.",
+        threshold as f64 / 100.0,
+        new_balance as f64 / 100.0,
+    );
+    mailer.send(&org.contact_email, &subject, body).await;
+}
+
+/// True only the moment a balance moves from at-or-above the threshold to
+/// strictly below it — never while already below (no repeat alerts per
+/// beer) and never on the way back up.
+fn crosses_threshold(old_balance: i64, new_balance: i64, threshold: i64) -> bool {
+    old_balance >= threshold && new_balance < threshold
 }
 
 pub async fn record_consumption(
     pool: &PgPool,
+    mailer: &Mailer,
     org_id: Uuid,
     player_id: Uuid,
     consumable_type_id: Uuid,
@@ -108,6 +175,7 @@ pub async fn record_consumption(
 
     insert_and_apply(
         pool,
+        mailer,
         org_id,
         player_id,
         kind,
@@ -124,6 +192,7 @@ pub async fn record_consumption(
 
 pub async fn record_fine(
     pool: &PgPool,
+    mailer: &Mailer,
     org_id: Uuid,
     player_id: Uuid,
     fine_type_id: Uuid,
@@ -141,6 +210,7 @@ pub async fn record_fine(
 
     insert_and_apply(
         pool,
+        mailer,
         org_id,
         player_id,
         TransactionKind::Fine,
@@ -157,6 +227,7 @@ pub async fn record_fine(
 
 pub async fn record_credit(
     pool: &PgPool,
+    mailer: &Mailer,
     org_id: Uuid,
     player_id: Uuid,
     amount_cents: i64,
@@ -169,6 +240,7 @@ pub async fn record_credit(
 
     insert_and_apply(
         pool,
+        mailer,
         org_id,
         player_id,
         TransactionKind::Credit,
@@ -185,6 +257,7 @@ pub async fn record_credit(
 
 pub async fn record_adjustment(
     pool: &PgPool,
+    mailer: &Mailer,
     org_id: Uuid,
     player_id: Uuid,
     amount_cents: i64,
@@ -193,6 +266,7 @@ pub async fn record_adjustment(
 ) -> AppResult<Transaction> {
     insert_and_apply(
         pool,
+        mailer,
         org_id,
         player_id,
         TransactionKind::ManualAdjustment,
@@ -261,13 +335,14 @@ mod tests {
         .await
         .expect("seed data must contain a 'red_card' fine type");
 
-        record_credit(&pool, org_id, player_id, 2000, None, "test")
+        let mailer = Mailer::disabled();
+        record_credit(&pool, &mailer, org_id, player_id, 2000, None, "test")
             .await
             .expect("credit should succeed");
-        record_consumption(&pool, org_id, player_id, beer_id, 2, "test")
+        record_consumption(&pool, &mailer, org_id, player_id, beer_id, 2, "test")
             .await
             .expect("consumption should succeed");
-        record_fine(&pool, org_id, player_id, fine_id, None, "test")
+        record_fine(&pool, &mailer, org_id, player_id, fine_id, None, "test")
             .await
             .expect("fine should succeed");
 
@@ -300,7 +375,16 @@ mod tests {
     async fn action_on_unknown_player_returns_not_found() {
         let pool = test_pool().await;
         let org_id = moelan_org_id(&pool).await;
-        let result = record_credit(&pool, org_id, Uuid::new_v4(), 100, None, "test").await;
+        let result = record_credit(
+            &pool,
+            &Mailer::disabled(),
+            org_id,
+            Uuid::new_v4(),
+            100,
+            None,
+            "test",
+        )
+        .await;
         assert!(matches!(result, Err(AppError::NotFound)));
     }
 
@@ -309,7 +393,30 @@ mod tests {
         let pool = test_pool().await;
         let org_id = moelan_org_id(&pool).await;
         let player_id = create_test_player(&pool, org_id, "negative-credit-check").await;
-        let result = record_credit(&pool, org_id, player_id, -100, None, "test").await;
+        let result = record_credit(
+            &pool,
+            &Mailer::disabled(),
+            org_id,
+            player_id,
+            -100,
+            None,
+            "test",
+        )
+        .await;
         assert!(matches!(result, Err(AppError::BadRequest(_))));
+    }
+
+    #[test]
+    fn crosses_threshold_fires_only_on_the_moment_of_crossing() {
+        // Threshold -3000 (-30€): dropping from -2000 to -3500 crosses it.
+        assert!(crosses_threshold(-2000, -3500, -3000));
+        // Already below: no repeat alert on the next debit.
+        assert!(!crosses_threshold(-3500, -4000, -3000));
+        // Recovering back above, then dropping below again: fires again.
+        assert!(crosses_threshold(-2500, -3500, -3000));
+        // Landing exactly on the threshold doesn't count as "below" it.
+        assert!(!crosses_threshold(0, -3000, -3000));
+        // Moving up never fires, even while below the threshold.
+        assert!(!crosses_threshold(-4000, -3500, -3000));
     }
 }

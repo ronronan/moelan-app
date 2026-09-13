@@ -37,11 +37,13 @@ async fn main() {
         config.keycloak_audience.clone(),
     ));
     let keycloak_admin = Arc::new(services::keycloak_admin::KeycloakAdmin::new(&config));
+    let mailer = Arc::new(services::mail::Mailer::new(&config));
 
     let state = AppState {
         pool,
         jwt,
         keycloak_admin,
+        mailer,
     };
     let app = routes::build_router(state);
 

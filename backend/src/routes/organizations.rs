@@ -144,8 +144,16 @@ pub async fn patch_my_organization(
 ) -> AppResult<Json<Organization>> {
     let org = sqlx::query_as!(
         Organization,
-        "UPDATE organizations SET target_cents = $1, updated_at = now() WHERE id = $2 RETURNING *",
+        r#"
+        UPDATE organizations SET
+            target_cents = $1,
+            debt_alert_threshold_cents = $2,
+            updated_at = now()
+        WHERE id = $3
+        RETURNING *
+        "#,
         body.target_cents,
+        body.debt_alert_threshold_cents,
         admin.0.org_id,
     )
     .fetch_one(&state.pool)

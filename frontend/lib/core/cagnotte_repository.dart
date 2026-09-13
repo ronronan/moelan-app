@@ -158,12 +158,20 @@ class CagnotteRepository {
     return Organization.fromJson(res.data);
   }
 
-  /// `targetCents: null` clears the objective; omit the call entirely to
-  /// leave it untouched (there's no "don't change this" value to pass here).
-  Future<Organization> patchMyOrganizationTarget(int? targetCents) async {
+  /// The backend replaces both fields unconditionally, so every call must
+  /// send the full desired state for each — there's no "leave untouched"
+  /// value, and omitting one would silently clear it. `null` clears that
+  /// field.
+  Future<Organization> patchMyOrganization({
+    required int? targetCents,
+    required int? debtAlertThresholdCents,
+  }) async {
     final res = await _dio.patch(
       '/api/organizations/me',
-      data: {'target_cents': targetCents},
+      data: {
+        'target_cents': targetCents,
+        'debt_alert_threshold_cents': debtAlertThresholdCents,
+      },
     );
     return Organization.fromJson(res.data);
   }

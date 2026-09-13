@@ -60,6 +60,15 @@ services:
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-moelan}
       KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-moelan-api-service}
       KEYCLOAK_SERVICE_CLIENT_SECRET: ${KEYCLOAK_SERVICE_CLIENT_SECRET:-}
+      # Generic SMTP relay for debt-alert emails — works with Mailgun/
+      # Brevo/SendGrid/etc, all of which expose one. Unset SMTP_HOST means
+      # "don't send email" rather than an error, so the app runs fine
+      # without a mail provider configured yet.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       RUST_LOG: info
     ports:
       - "8000:8000"

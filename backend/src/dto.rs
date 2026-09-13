@@ -77,12 +77,16 @@ pub struct InvitePlayer {
 
 #[derive(Debug, Deserialize)]
 pub struct PatchOrganization {
-    /// The frontend always sends this field with the full desired state
-    /// (a value, or `null` to clear it) rather than omitting it — so a
-    /// plain `Option` is enough; there's no third "leave untouched" case
-    /// to represent (which `Option<Option<_>>` cannot distinguish from
-    /// "clear" through serde_json's JSON `null` handling anyway).
+    /// The frontend always sends both fields with their full desired state
+    /// (a value, or `null` to clear it) rather than omitting them — so a
+    /// plain `Option` is enough for each; there's no third "leave
+    /// untouched" case to represent (which `Option<Option<_>>` cannot
+    /// distinguish from "clear" through serde_json's JSON `null` handling
+    /// anyway).
     pub target_cents: Option<i64>,
+    /// Negative or zero (enforced by the `organizations` CHECK constraint):
+    /// a debt alert fires once a player's balance drops below this.
+    pub debt_alert_threshold_cents: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
