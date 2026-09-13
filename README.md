@@ -117,6 +117,46 @@ vide, aucune erreur : les alertes sont simplement journalisées
 (`RUST_LOG=info`) au lieu d'être envoyées — pratique pour développer sans
 identifiants réels, à brancher plus tard.
 
+### Notifications push (Firebase)
+
+Chaque action sur le compte d'un joueur (bière, soft, amende, crédit,
+ajustement) peut déclencher une notification push sur son téléphone, s'il a
+un compte "joueur" (invité, cf. le bouton "Donner un accès" sur sa fiche) et
+qu'il a autorisé les notifications dans l'app. Le code (backend et frontend)
+est écrit et branché, mais **ne fera rien tant qu'un projet Firebase n'a pas
+été créé** — sans configuration, chaque tentative d'envoi est simplement
+journalisée (backend) ou échoue silencieusement (frontend), sans jamais
+bloquer le reste de l'app. Pour l'activer :
+
+1. Créer un projet sur https://console.firebase.google.com
+2. **Ajouter une app Android** : package `fr.moelan.app` (voir
+   `frontend/android/app/build.gradle.kts`). Télécharger le
+   `google-services.json` généré et le placer dans `frontend/android/app/`.
+   Puis appliquer le plugin Google Services :
+   - dans `frontend/android/settings.gradle.kts`, ajouter
+     `id("com.google.gms.google-services") version "4.4.2" apply false`
+     à côté des autres plugins déclarés ;
+   - dans `frontend/android/app/build.gradle.kts`, ajouter
+     `id("com.google.gms.google-services")` au bloc `plugins { ... }`.
+3. **Ajouter une app Web** (pour le web push) : copier la config JS
+   fournie dans un fichier `frontend/lib/firebase_options.dart` — le plus
+   simple est de lancer `dart pub global activate flutterfire_cli` puis
+   `flutterfire configure` depuis `frontend/`, qui génère ce fichier pour
+   toutes les plateformes ajoutées au projet Firebase (Android compris,
+   en plus du `google-services.json` ci-dessus).
+4. Une fois `firebase_options.dart` généré, passer `Firebase.initializeApp()`
+   à `Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)`
+   dans `frontend/lib/core/push/push_notifications.dart`.
+5. **Créer la clé de service pour l'envoi serveur** : Paramètres du projet
+   → Comptes de service → Générer une nouvelle clé privée (JSON). Mettre
+   le contenu complet de ce fichier dans `FIREBASE_SERVICE_ACCOUNT_JSON`
+   (pas un chemin de fichier, tout le JSON), et l'ID du projet dans
+   `FIREBASE_PROJECT_ID`, puis `docker compose up -d api`.
+
+Sans les étapes 2-4, `Firebase.initializeApp()` échoue proprement côté
+Flutter (capturé, journalisé, rien ne casse) : rien n'empêche de déployer
+l'app ou de démarrer le backend avant d'avoir fait ce travail.
+
 ### Reverse proxy Traefik (optionnel)
 
 Un reverse proxy Traefik peut regrouper web/API/Keycloak sous un seul nom

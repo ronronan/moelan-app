@@ -9,8 +9,15 @@ use crate::auth::{AdminUser, OrgUser, WriterUser};
 use crate::db::models::{Transaction, TransactionKind};
 use crate::dto::{CreateAdjustment, CreateConsumption, CreateCredit, CreateFine, TransactionQuery};
 use crate::error::AppResult;
-use crate::services::transactions as service;
+use crate::services::transactions::{self as service, Notifiers};
 use crate::state::AppState;
+
+fn notifiers(state: &AppState) -> Notifiers<'_> {
+    Notifiers {
+        mailer: &state.mailer,
+        fcm: &state.fcm,
+    }
+}
 
 pub async fn create_consumption(
     State(state): State<AppState>,
@@ -20,7 +27,7 @@ pub async fn create_consumption(
 ) -> AppResult<Json<Transaction>> {
     let tx = service::record_consumption(
         &state.pool,
-        &state.mailer,
+        &notifiers(&state),
         writer.0.org_id,
         player_id,
         body.consumable_type_id,
@@ -39,7 +46,7 @@ pub async fn create_fine(
 ) -> AppResult<Json<Transaction>> {
     let tx = service::record_fine(
         &state.pool,
-        &state.mailer,
+        &notifiers(&state),
         writer.0.org_id,
         player_id,
         body.fine_type_id,
@@ -58,7 +65,7 @@ pub async fn create_credit(
 ) -> AppResult<Json<Transaction>> {
     let tx = service::record_credit(
         &state.pool,
-        &state.mailer,
+        &notifiers(&state),
         writer.0.org_id,
         player_id,
         body.amount_cents,
@@ -77,7 +84,7 @@ pub async fn create_adjustment(
 ) -> AppResult<Json<Transaction>> {
     let tx = service::record_adjustment(
         &state.pool,
-        &state.mailer,
+        &notifiers(&state),
         admin.0.org_id,
         player_id,
         body.amount_cents,

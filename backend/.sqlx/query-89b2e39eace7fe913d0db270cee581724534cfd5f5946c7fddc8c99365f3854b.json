@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO device_tokens (organization_id, user_sub, email, token, platform)\n        VALUES ($1, $2, $3, $4, $5)\n        ON CONFLICT (token) DO UPDATE SET\n            organization_id = EXCLUDED.organization_id,\n            user_sub = EXCLUDED.user_sub,\n            email = EXCLUDED.email,\n            platform = EXCLUDED.platform\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "89b2e39eace7fe913d0db270cee581724534cfd5f5946c7fddc8c99365f3854b"
+}

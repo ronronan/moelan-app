@@ -42,6 +42,12 @@ dependencies:
   oidc_default_store: ^1.1.2
   collection: ^1.19.1
   fl_chart: ^0.69.0
+  # M16 scaffolding: push notifications. Both packages are safe to fetch
+  # and build with no Firebase project configured yet — see
+  # core/push/push_notifications.dart, which fails soft (logs, doesn't
+  # crash) until a real project's config is wired in (see README).
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.1.6
 
 dev_dependencies:
   flutter_test:

@@ -90,6 +90,12 @@ pub struct PatchOrganization {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct RegisterDeviceToken {
+    pub token: String,
+    pub platform: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct TransactionQuery {
     pub player_id: Option<Uuid>,
     pub kind: Option<String>,

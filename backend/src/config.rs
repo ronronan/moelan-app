@@ -19,6 +19,14 @@ pub struct Config {
     pub smtp_username: String,
     pub smtp_password: String,
     pub smtp_from: String,
+    /// M16 scaffolding: both unset means "don't send push" — a Firebase
+    /// project has to be created by hand first (see README), so this
+    /// can't have a working default the way SMTP does with an empty host.
+    pub firebase_project_id: Option<String>,
+    /// The full service-account JSON content (not a file path) — same
+    /// env-var-based config style as everything else here, no volume
+    /// mount needed in Docker Compose.
+    pub firebase_service_account_json: Option<String>,
 }
 
 impl Config {
@@ -53,6 +61,12 @@ impl Config {
             smtp_username: std::env::var("SMTP_USERNAME").unwrap_or_default(),
             smtp_password: std::env::var("SMTP_PASSWORD").unwrap_or_default(),
             smtp_from: std::env::var("SMTP_FROM").unwrap_or_default(),
+            firebase_project_id: std::env::var("FIREBASE_PROJECT_ID")
+                .ok()
+                .filter(|v| !v.is_empty()),
+            firebase_service_account_json: std::env::var("FIREBASE_SERVICE_ACCOUNT_JSON")
+                .ok()
+                .filter(|v| !v.is_empty()),
         }
     }
 }

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_providers.dart';
 import '../../core/cagnotte_repository.dart';
 import '../../core/format.dart';
+import '../../core/push/push_notifications.dart';
 import '../../models/consumable_type.dart';
 import '../../models/player.dart';
 import 'players_providers.dart';
@@ -33,6 +34,14 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final Set<String> _selected = {};
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // M16 scaffolding: no-ops until a Firebase project is configured (see
+    // core/push/push_notifications.dart) — safe to always attempt.
+    ref.read(pushNotificationsProvider).initialize(ref);
+  }
 
   void _toggleSelected(String playerId) {
     setState(() {

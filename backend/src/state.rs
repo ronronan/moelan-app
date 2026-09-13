@@ -3,6 +3,7 @@ use std::sync::Arc;
 use sqlx::PgPool;
 
 use crate::auth::JwtValidator;
+use crate::services::fcm::FcmSender;
 use crate::services::keycloak_admin::KeycloakAdmin;
 use crate::services::mail::Mailer;
 
@@ -12,4 +13,5 @@ pub struct AppState {
     pub jwt: Arc<JwtValidator>,
     pub keycloak_admin: Arc<KeycloakAdmin>,
     pub mailer: Arc<Mailer>,
+    pub fcm: Arc<FcmSender>,
 }

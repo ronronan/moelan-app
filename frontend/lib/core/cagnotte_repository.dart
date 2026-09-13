@@ -205,6 +205,14 @@ class CagnotteRepository {
     );
     return (res.data as List).map((e) => MonthlyStat.fromJson(e)).toList();
   }
+
+  /// M16 scaffolding — see `core/push/push_notifications.dart`.
+  Future<void> registerDeviceToken(String token, String platform) async {
+    await _dio.post(
+      '/api/me/device-tokens',
+      data: {'token': token, 'platform': platform},
+    );
+  }
 }
 
 final cagnotteRepositoryProvider = Provider<CagnotteRepository>((ref) {

@@ -69,6 +69,11 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      # M16 scaffolding: push notifications via Firebase Cloud Messaging.
+      # Both unset means "don't send push" — see README for how to create
+      # a Firebase project and get these two values.
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
       RUST_LOG: info
     ports:
       - "8000:8000"

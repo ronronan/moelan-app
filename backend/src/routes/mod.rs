@@ -1,4 +1,5 @@
 pub mod consumable_types;
+pub mod device_tokens;
 pub mod fine_types;
 pub mod health;
 pub mod me;
@@ -76,6 +77,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/fine-types/{id}", patch(fine_types::patch_fine_type))
         .route("/api/stats/monthly", get(stats::monthly))
+        .route(
+            "/api/me/device-tokens",
+            post(device_tokens::register_device_token),
+        )
         .with_state(state)
         // The Flutter web app calls this API from a different origin
         // (different port); browsers require CORS headers before they'll

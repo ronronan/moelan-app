@@ -38,12 +38,14 @@ async fn main() {
     ));
     let keycloak_admin = Arc::new(services::keycloak_admin::KeycloakAdmin::new(&config));
     let mailer = Arc::new(services::mail::Mailer::new(&config));
+    let fcm = Arc::new(services::fcm::FcmSender::new(&config));
 
     let state = AppState {
         pool,
         jwt,
         keycloak_admin,
         mailer,
+        fcm,
     };
     let app = routes::build_router(state);
 

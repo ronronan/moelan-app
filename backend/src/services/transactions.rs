@@ -3,7 +3,16 @@ use uuid::Uuid;
 
 use crate::db::models::{Transaction, TransactionKind};
 use crate::error::{AppError, AppResult};
+use crate::services::fcm::FcmSender;
 use crate::services::mail::Mailer;
+
+/// The two "tell someone outside the app" side effects every ledger write
+/// can trigger — bundled so adding a third one later doesn't mean growing
+/// every `record_*` function's argument list again.
+pub struct Notifiers<'a> {
+    pub mailer: &'a Mailer,
+    pub fcm: &'a FcmSender,
+}
 
 /// Single choke point for every balance-affecting write: inserts the ledger
 /// row and updates the cached `players.balance_cents` atomically, so the
@@ -11,7 +20,7 @@ use crate::services::mail::Mailer;
 #[allow(clippy::too_many_arguments)]
 async fn insert_and_apply(
     pool: &PgPool,
-    mailer: &Mailer,
+    notifiers: &Notifiers<'_>,
     org_id: Uuid,
     player_id: Uuid,
     kind: TransactionKind,
@@ -53,7 +62,7 @@ async fn insert_and_apply(
         "#,
         org_id,
         player_id,
-        kind as TransactionKind,
+        kind.clone() as TransactionKind,
         amount_cents,
         quantity,
         unit_price_cents,
@@ -77,7 +86,7 @@ async fn insert_and_apply(
 
     maybe_send_debt_alert(
         pool,
-        mailer,
+        notifiers.mailer,
         org_id,
         old_balance,
         new_balance,
@@ -86,7 +95,37 @@ async fn insert_and_apply(
     )
     .await;
 
+    let (push_title, push_body) = push_notification_text(kind, amount_cents, new_balance);
+    notifiers
+        .fcm
+        .notify_player(pool, org_id, player_id, &push_title, &push_body)
+        .await;
+
     Ok(transaction)
+}
+
+/// M16 scaffolding: the message shown on a player's own device the moment
+/// an action lands on their account (`FcmSender::notify_player` no-ops
+/// until Firebase is actually configured, so this always runs but rarely
+/// sends anything today).
+fn push_notification_text(
+    kind: TransactionKind,
+    amount_cents: i64,
+    new_balance: i64,
+) -> (String, String) {
+    let title = match kind {
+        TransactionKind::Beer => "Bière",
+        TransactionKind::Soft => "Soft",
+        TransactionKind::Fine => "Amende",
+        TransactionKind::Credit => "Crédit",
+        TransactionKind::ManualAdjustment => "Ajustement",
+    };
+    let body = format!(
+        "{:+.2} € — nouveau solde : {:.2} €",
+        amount_cents as f64 / 100.0,
+        new_balance as f64 / 100.0,
+    );
+    (title.to_string(), body)
 }
 
 /// Fires at most once per crossing: only when this write moves the balance
@@ -139,7 +178,7 @@ fn crosses_threshold(old_balance: i64, new_balance: i64, threshold: i64) -> bool
 
 pub async fn record_consumption(
     pool: &PgPool,
-    mailer: &Mailer,
+    notifiers: &Notifiers<'_>,
     org_id: Uuid,
     player_id: Uuid,
     consumable_type_id: Uuid,
@@ -175,7 +214,7 @@ pub async fn record_consumption(
 
     insert_and_apply(
         pool,
-        mailer,
+        notifiers,
         org_id,
         player_id,
         kind,
@@ -192,7 +231,7 @@ pub async fn record_consumption(
 
 pub async fn record_fine(
     pool: &PgPool,
-    mailer: &Mailer,
+    notifiers: &Notifiers<'_>,
     org_id: Uuid,
     player_id: Uuid,
     fine_type_id: Uuid,
@@ -210,7 +249,7 @@ pub async fn record_fine(
 
     insert_and_apply(
         pool,
-        mailer,
+        notifiers,
         org_id,
         player_id,
         TransactionKind::Fine,
@@ -227,7 +266,7 @@ pub async fn record_fine(
 
 pub async fn record_credit(
     pool: &PgPool,
-    mailer: &Mailer,
+    notifiers: &Notifiers<'_>,
     org_id: Uuid,
     player_id: Uuid,
     amount_cents: i64,
@@ -240,7 +279,7 @@ pub async fn record_credit(
 
     insert_and_apply(
         pool,
-        mailer,
+        notifiers,
         org_id,
         player_id,
         TransactionKind::Credit,
@@ -257,7 +296,7 @@ pub async fn record_credit(
 
 pub async fn record_adjustment(
     pool: &PgPool,
-    mailer: &Mailer,
+    notifiers: &Notifiers<'_>,
     org_id: Uuid,
     player_id: Uuid,
     amount_cents: i64,
@@ -266,7 +305,7 @@ pub async fn record_adjustment(
 ) -> AppResult<Transaction> {
     insert_and_apply(
         pool,
-        mailer,
+        notifiers,
         org_id,
         player_id,
         TransactionKind::ManualAdjustment,
@@ -335,14 +374,17 @@ mod tests {
         .await
         .expect("seed data must contain a 'red_card' fine type");
 
-        let mailer = Mailer::disabled();
-        record_credit(&pool, &mailer, org_id, player_id, 2000, None, "test")
+        let notifiers = Notifiers {
+            mailer: &Mailer::disabled(),
+            fcm: &FcmSender::disabled(),
+        };
+        record_credit(&pool, &notifiers, org_id, player_id, 2000, None, "test")
             .await
             .expect("credit should succeed");
-        record_consumption(&pool, &mailer, org_id, player_id, beer_id, 2, "test")
+        record_consumption(&pool, &notifiers, org_id, player_id, beer_id, 2, "test")
             .await
             .expect("consumption should succeed");
-        record_fine(&pool, &mailer, org_id, player_id, fine_id, None, "test")
+        record_fine(&pool, &notifiers, org_id, player_id, fine_id, None, "test")
             .await
             .expect("fine should succeed");
 
@@ -377,7 +419,10 @@ mod tests {
         let org_id = moelan_org_id(&pool).await;
         let result = record_credit(
             &pool,
-            &Mailer::disabled(),
+            &Notifiers {
+                mailer: &Mailer::disabled(),
+                fcm: &FcmSender::disabled(),
+            },
             org_id,
             Uuid::new_v4(),
             100,
@@ -395,7 +440,10 @@ mod tests {
         let player_id = create_test_player(&pool, org_id, "negative-credit-check").await;
         let result = record_credit(
             &pool,
-            &Mailer::disabled(),
+            &Notifiers {
+                mailer: &Mailer::disabled(),
+                fcm: &FcmSender::disabled(),
+            },
             org_id,
             player_id,
             -100,
