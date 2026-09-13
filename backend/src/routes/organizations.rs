@@ -86,8 +86,40 @@ pub async fn create_organization(
         .keycloak_admin
         .add_user_to_group(&user.sub, &group_ids.admin_group_id)
         .await?;
+    seed_default_types(&state.pool, org.id).await?;
 
     Ok(Json(org))
+}
+
+/// Every space needs somewhere to start: the same beer/soft prices and fine
+/// list the original single-team app shipped with (`0002_seed.sql`), copied
+/// per-org since there's no "create a consumable/fine type" endpoint —
+/// admins only ever edit these seeded rows via Réglages.
+async fn seed_default_types(pool: &sqlx::PgPool, org_id: Uuid) -> AppResult<()> {
+    sqlx::query!(
+        r#"
+        INSERT INTO consumable_types (organization_id, code, label, price_cents) VALUES
+            ($1, 'beer', 'Bière', 100),
+            ($1, 'soft', 'Soft', 100)
+        "#,
+        org_id,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query!(
+        r#"
+        INSERT INTO fine_types (organization_id, code, label, amount_cents) VALUES
+            ($1, 'late_training', 'Retard entraînement', 200),
+            ($1, 'forgot_gear', 'Oubli d''équipement', 200),
+            ($1, 'red_card', 'Carton rouge', 500)
+        "#,
+        org_id,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
 }
 
 pub async fn list_pending_organizations(

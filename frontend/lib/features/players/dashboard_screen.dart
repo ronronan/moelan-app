@@ -95,6 +95,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     onPressed: () => context.push('/settings'),
                   ),
                 IconButton(
+                  icon: const Icon(Icons.bar_chart),
+                  tooltip: 'Statistiques',
+                  onPressed: () => context.push('/stats'),
+                ),
+                IconButton(
                   icon: const Icon(Icons.history),
                   tooltip: 'Historique',
                   onPressed: () => context.push('/history'),

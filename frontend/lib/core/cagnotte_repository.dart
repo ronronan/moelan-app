@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/consumable_type.dart';
 import '../models/fine_type.dart';
 import '../models/me_status.dart';
+import '../models/monthly_stat.dart';
 import '../models/organization.dart';
 import '../models/player.dart';
 import '../models/transaction.dart';
@@ -187,6 +188,14 @@ class CagnotteRepository {
       },
     );
     return (res.data as List).map((e) => Transaction.fromJson(e)).toList();
+  }
+
+  Future<List<MonthlyStat>> getMonthlyStats(int year) async {
+    final res = await _dio.get(
+      '/api/stats/monthly',
+      queryParameters: {'year': year},
+    );
+    return (res.data as List).map((e) => MonthlyStat.fromJson(e)).toList();
   }
 }
 

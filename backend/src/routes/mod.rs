@@ -4,6 +4,7 @@ pub mod health;
 pub mod me;
 pub mod organizations;
 pub mod players;
+pub mod stats;
 pub mod transactions;
 
 use axum::{
@@ -74,6 +75,7 @@ pub fn build_router(state: AppState) -> Router {
             get(fine_types::list_fine_types).post(fine_types::create_fine_type),
         )
         .route("/api/fine-types/{id}", patch(fine_types::patch_fine_type))
+        .route("/api/stats/monthly", get(stats::monthly))
         .with_state(state)
         // The Flutter web app calls this API from a different origin
         // (different port); browsers require CORS headers before they'll

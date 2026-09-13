@@ -4,6 +4,7 @@ import '../../core/auth/auth_providers.dart';
 import '../../core/cagnotte_repository.dart';
 import '../../models/consumable_type.dart';
 import '../../models/fine_type.dart';
+import '../../models/monthly_stat.dart';
 import '../../models/player.dart';
 import '../../models/transaction.dart';
 
@@ -39,6 +40,14 @@ final consumableTypesProvider = FutureProvider<List<ConsumableType>>((ref) {
 final fineTypesProvider = FutureProvider<List<FineType>>((ref) {
   ref.watch(currentUserProvider);
   return ref.watch(cagnotteRepositoryProvider).listFineTypes();
+});
+
+final monthlyStatsProvider = FutureProvider.family<List<MonthlyStat>, int>((
+  ref,
+  year,
+) {
+  ref.watch(currentUserProvider);
+  return ref.watch(cagnotteRepositoryProvider).getMonthlyStats(year);
 });
 
 /// Call after any write that changes a player's balance or the ledger, so

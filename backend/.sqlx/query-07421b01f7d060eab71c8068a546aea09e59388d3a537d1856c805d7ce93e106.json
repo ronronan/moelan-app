@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH monthly AS (\n            SELECT\n                date_trunc('month', created_at) AS month,\n                SUM(amount_cents)::bigint AS net_cents,\n                SUM(CASE WHEN kind = 'beer' THEN quantity ELSE 0 END)::bigint AS beer_count,\n                SUM(CASE WHEN kind = 'soft' THEN quantity ELSE 0 END)::bigint AS soft_count,\n                SUM(CASE WHEN kind = 'fine' THEN -amount_cents ELSE 0 END)::bigint AS fine_total_cents,\n                SUM(CASE WHEN kind = 'credit' THEN amount_cents ELSE 0 END)::bigint AS credit_total_cents\n            FROM transactions\n            WHERE organization_id = $1\n            GROUP BY month\n        ),\n        cumulative AS (\n            SELECT\n                month,\n                net_cents,\n                beer_count,\n                soft_count,\n                fine_total_cents,\n                credit_total_cents,\n                SUM(net_cents) OVER (ORDER BY month)::bigint AS balance_cents\n            FROM monthly\n        )\n        SELECT\n            month AS \"month!: DateTime<Utc>\",\n            beer_count AS \"beer_count!\",\n            soft_count AS \"soft_count!\",\n            fine_total_cents AS \"fine_total_cents!\",\n            credit_total_cents AS \"credit_total_cents!\",\n            net_cents AS \"net_cents!\",\n            balance_cents AS \"balance_cents!\"\n        FROM cumulative\n        WHERE date_part('year', month) = $2::double precision\n        ORDER BY month\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "month!: DateTime<Utc>",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "beer_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "soft_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "fine_total_cents!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "credit_total_cents!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "net_cents!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "balance_cents!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "07421b01f7d060eab71c8068a546aea09e59388d3a537d1856c805d7ce93e106"
+}
