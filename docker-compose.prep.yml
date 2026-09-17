@@ -1,0 +1,67 @@
+name: moelan
+services:
+  api:
+    build: ./backend
+    image: ronronan-local/moelan-api:prep
+    container_name: moelan-api
+    environment:
+      DATABASE_URL: postgres://moelan:changeme@postgres:5432/moelanprep
+      BIND_ADDR: 0.0.0.0:8000
+      KEYCLOAK_ISSUER_URL: https://keycloak.3rm.fr/realms/moelan-prep
+      KEYCLOAK_JWKS_URL: https://keycloak.3rm.fr/realms/moelan-prep
+      KEYCLOAK_AUDIENCE: moelan-api
+      KEYCLOAK_REALM: moelan
+      KEYCLOAK_SERVICE_CLIENT_ID: moelan-api-service
+      KEYCLOAK_SERVICE_CLIENT_SECRET: TODO
+      SMTP_HOST: 192.168.1.21
+      SMTP_PORT: 25
+      SMTP_USERNAME: moelan
+      SMTP_PASSWORD: moelan123
+      SMTP_FROM: MOELAN App
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+      RUST_LOG: info
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.moelan-api.entrypoints: websecure
+      traefik.http.routers.moelan-api.tls: "true"
+      traefik.http.routers.moelan-api.service: moelan-api
+      traefik.http.services.moelan-api.loadbalancer.server.port: 8000
+      traefik.http.routers.moelan-api.tls.certresolver: ovhresolver
+      traefik.http.routers.moelan-api.rule: Host(`moelan-api-prep.3rm.fr`)
+    networks:
+      - rml-lab
+
+  web:
+    build:
+      context: .
+      dockerfile: ./infra/web/Dockerfile
+      args:
+        API_BASE_URL: https://moelan-api-prep.3rm.fr
+        KEYCLOAK_ISSUER_URL: https://keycloak.3rm.fr/realms/moelan-prep
+    image: ronronan-local/moelan-front:prep
+    container_name: moelan-front
+    expose:
+      - "80"
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.moelan-web.entrypoints: websecure
+      traefik.http.routers.moelan-web.tls: "true"
+      traefik.http.routers.moelan-web.service: moelan-web
+      traefik.http.services.moelan-web.loadbalancer.server.port: 80
+      traefik.http.routers.moelan-web.tls.certresolver: ovhresolver
+      traefik.http.routers.moelan-web.rule: Host(`moelan-prep.3rm.fr`)
+    networks:
+      - rml-lab
+
+networks:
+  rml-lab:
+    name: rml-lab
+    external: true
