@@ -512,6 +512,16 @@
       }
     ]
   },
+  "users": [
+    {
+      "username": "service-account-moelan-api-service",
+      "enabled": true,
+      "serviceAccountClientId": "moelan-api-service",
+      "clientRoles": {
+        "realm-management": ["realm-admin"]
+      }
+    }
+  ],
   "clients": [
     {
       "id": "a3bb7ec5-fcf3-4935-84df-562d145cb07e",
@@ -714,7 +724,6 @@
       "enabled": true,
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "**********",
       "redirectUris": [],
       "webOrigins": [],
       "notBefore": 0,
