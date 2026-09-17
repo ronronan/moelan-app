@@ -55,7 +55,7 @@ services:
       # resolve that hostname to the keycloak container itself, so it
       # fetches keys via KEYCLOAK_JWKS_URL (internal DNS) instead.
       KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL:-http://localhost:8080/realms/moelan}
-      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/moelan
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM:-moelan}
       KEYCLOAK_AUDIENCE: moelan-api
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-moelan}
       KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-moelan-api-service}
