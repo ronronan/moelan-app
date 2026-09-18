@@ -22,7 +22,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/me", get(me::me))
         .route(
             "/api/organizations",
-            post(organizations::create_organization),
+            get(organizations::list_organizations).post(organizations::create_organization),
         )
         .route(
             "/api/organizations/me",
@@ -35,6 +35,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/organizations/{id}/approve",
             patch(organizations::approve_organization),
+        )
+        .route(
+            "/api/organizations/{id}/players",
+            get(players::list_players_for_org),
         )
         .route(
             "/api/players",

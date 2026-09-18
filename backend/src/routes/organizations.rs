@@ -122,6 +122,19 @@ async fn seed_default_types(pool: &sqlx::PgPool, org_id: Uuid) -> AppResult<()> 
     Ok(())
 }
 
+/// Every space, approved or not — lets the super-admin operator browse into
+/// any organization's data (see `players::list_players_for_org`), not just
+/// the ones still awaiting approval.
+pub async fn list_organizations(
+    State(state): State<AppState>,
+    _super_admin: SuperAdminUser,
+) -> AppResult<Json<Vec<Organization>>> {
+    let orgs = sqlx::query_as!(Organization, "SELECT * FROM organizations ORDER BY name")
+        .fetch_all(&state.pool)
+        .await?;
+    Ok(Json(orgs))
+}
+
 pub async fn list_pending_organizations(
     State(state): State<AppState>,
     _super_admin: SuperAdminUser,

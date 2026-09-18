@@ -153,6 +153,19 @@ class CagnotteRepository {
     return (res.data as List).map((e) => Organization.fromJson(e)).toList();
   }
 
+  /// Super-admin only: every space, approved or not, to browse into.
+  Future<List<Organization>> listOrganizations() async {
+    final res = await _dio.get('/api/organizations');
+    return (res.data as List).map((e) => Organization.fromJson(e)).toList();
+  }
+
+  /// Super-admin only: a given org's players, read-only (the operator isn't
+  /// a member of that org, so none of the write endpoints apply to them).
+  Future<List<Player>> listPlayersForOrg(String orgId) async {
+    final res = await _dio.get('/api/organizations/$orgId/players');
+    return (res.data as List).map((e) => Player.fromJson(e)).toList();
+  }
+
   Future<Organization> approveOrganization(String id) async {
     final res = await _dio.patch('/api/organizations/$id/approve');
     return Organization.fromJson(res.data);

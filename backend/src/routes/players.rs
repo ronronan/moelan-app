@@ -5,7 +5,7 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::auth::{AdminUser, OrgUser};
+use crate::auth::{AdminUser, OrgUser, SuperAdminUser};
 use crate::db::models::Player;
 use crate::dto::{InvitePlayer, PatchPlayer};
 use crate::error::{AppError, AppResult};
@@ -42,6 +42,25 @@ pub async fn list_players(
             .await?
         }
     };
+    Ok(Json(players))
+}
+
+/// Same listing as `list_players`, but for the super-admin operator: it
+/// isn't tied to an org (`OrgUser` doesn't apply to it), so the target org
+/// comes from the path instead of the token, and there's no approval check
+/// — the operator needs to see a space's players before/without approving it.
+pub async fn list_players_for_org(
+    State(state): State<AppState>,
+    _super_admin: SuperAdminUser,
+    Path(org_id): Path<Uuid>,
+) -> AppResult<Json<Vec<Player>>> {
+    let players = sqlx::query_as!(
+        Player,
+        "SELECT * FROM players WHERE organization_id = $1 ORDER BY last_name, first_name",
+        org_id
+    )
+    .fetch_all(&state.pool)
+    .await?;
     Ok(Json(players))
 }
 

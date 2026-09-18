@@ -8,6 +8,7 @@ import 'features/auth/login_screen.dart';
 import 'features/history/history_screen.dart';
 import 'features/organizations/create_organization_screen.dart';
 import 'features/organizations/pending_approval_screen.dart';
+import 'features/organizations/superadmin_home_screen.dart';
 import 'features/organizations/superadmin_organizations_screen.dart';
 import 'features/players/dashboard_screen.dart';
 import 'features/players/player_detail_screen.dart';
@@ -71,7 +72,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(path: '/', builder: (context, state) => const DashboardScreen()),
+      GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/create-organization',
@@ -107,3 +108,23 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+/// `/`: a super-admin with no space of their own has nothing to dashboard
+/// (`DashboardScreen` would just 403 on `/api/players`, see `no_organization`
+/// handling there) — send them to the cross-org browser instead. Once we
+/// know (via `meStatus`) that the account does have its own space, it's
+/// dashboarded like anyone else's. While that's still loading, default to
+/// `DashboardScreen` to avoid a flash for the common (non-super-admin) case.
+class HomeScreen extends ConsumerWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isSuperAdmin = ref.watch(isSuperAdminProvider);
+    final meStatus = ref.watch(meStatusProvider);
+    final knownNoOwnOrg =
+        isSuperAdmin && meStatus.hasValue && meStatus.value?.organization == null;
+    if (knownNoOwnOrg) return const SuperAdminHomeScreen();
+    return const DashboardScreen();
+  }
+}
