@@ -1,17 +1,9 @@
-mod auth;
-mod config;
-mod db;
-mod dto;
-mod error;
-mod routes;
-mod services;
-mod state;
-
 use std::sync::Arc;
 
-use auth::JwtValidator;
-use config::Config;
-use state::AppState;
+use moelan_api::auth::JwtValidator;
+use moelan_api::config::Config;
+use moelan_api::state::AppState;
+use moelan_api::{db, routes, services};
 
 #[tokio::main]
 async fn main() {

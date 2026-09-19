@@ -7,10 +7,11 @@ pub mod organizations;
 pub mod players;
 pub mod stats;
 pub mod transactions;
+pub mod users;
 
 use axum::{
     Router,
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
 };
 use tower_http::cors::{Any, CorsLayer};
 
@@ -24,6 +25,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/organizations",
             get(organizations::list_organizations).post(organizations::create_organization),
         )
+        .route("/api/users", get(users::list_users))
         .route(
             "/api/organizations/me",
             patch(organizations::patch_my_organization),
@@ -31,6 +33,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/organizations/pending",
             get(organizations::list_pending_organizations),
+        )
+        .route(
+            "/api/organizations/{id}",
+            delete(organizations::delete_organization),
         )
         .route(
             "/api/organizations/{id}/approve",

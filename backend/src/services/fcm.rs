@@ -64,7 +64,7 @@ impl FcmSender {
         }
     }
 
-    #[cfg(test)]
+    /// Test/dev constructor: an instance that never sends anything.
     pub fn disabled() -> Self {
         Self {
             http: reqwest::Client::new(),

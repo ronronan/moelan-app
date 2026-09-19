@@ -37,7 +37,6 @@ impl Mailer {
     /// For tests that exercise `services::transactions` without wanting a
     /// real `Config` (and its required Keycloak env vars) just to get a
     /// no-op mailer.
-    #[cfg(test)]
     pub fn disabled() -> Self {
         Self {
             transport: None,

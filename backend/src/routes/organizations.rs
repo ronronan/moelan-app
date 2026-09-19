@@ -1,6 +1,7 @@
 use axum::{
     Json,
     extract::{Path, State},
+    http::StatusCode,
 };
 use uuid::Uuid;
 
@@ -188,4 +189,64 @@ pub async fn approve_organization(
     .await?
     .ok_or(AppError::NotFound)?;
     Ok(Json(org))
+}
+
+/// The other half of the super-admin's moderation job: refusing a space
+/// creation request instead of approving it. Deliberately limited to
+/// *pending* spaces — an approved space holds a real caisse noire (players,
+/// ledger, history) whose destruction isn't a moderation decision, so the
+/// route refuses it rather than cascading through live data.
+///
+/// A pending space has never been usable (`OrgUser` rejects everyone in it
+/// with `OrgPending`), so the only rows it can own are the beer/soft/fine
+/// types seeded at creation — deleted here alongside the org itself, in
+/// foreign-key order, within one transaction. The Keycloak groups go last
+/// and on a best-effort basis: leaving a group behind whose org row is gone
+/// is recoverable from the console, whereas failing the whole request after
+/// the rows are gone would leave the operator staring at a space that's
+/// half-deleted and no longer listed.
+pub async fn delete_organization(
+    State(state): State<AppState>,
+    _super_admin: SuperAdminUser,
+    Path(id): Path<Uuid>,
+) -> AppResult<StatusCode> {
+    let approved = sqlx::query_scalar!("SELECT approved FROM organizations WHERE id = $1", id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if approved {
+        return Err(AppError::BadRequest(
+            "cannot delete an approved organization".into(),
+        ));
+    }
+
+    let mut tx = state.pool.begin().await?;
+    sqlx::query!("DELETE FROM device_tokens WHERE organization_id = $1", id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query!("DELETE FROM transactions WHERE organization_id = $1", id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query!("DELETE FROM players WHERE organization_id = $1", id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query!(
+        "DELETE FROM consumable_types WHERE organization_id = $1",
+        id
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!("DELETE FROM fine_types WHERE organization_id = $1", id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query!("DELETE FROM organizations WHERE id = $1", id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+
+    if let Err(err) = state.keycloak_admin.delete_org_groups(id).await {
+        tracing::warn!(%err, %id, "organization deleted but its Keycloak groups could not be removed");
+    }
+
+    Ok(StatusCode::NO_CONTENT)
 }

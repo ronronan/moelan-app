@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -32,6 +32,38 @@ struct KeycloakRole {
 #[derive(Deserialize)]
 struct KeycloakGroup {
     id: String,
+}
+
+#[derive(Deserialize)]
+struct KeycloakGroupPath {
+    path: String,
+}
+
+/// One realm account as the super-admin listing needs it: identity, plus
+/// the two things that place it in the app — its realm roles (`superadmin`)
+/// and its `/org-<uuid>/<role>` group paths.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KeycloakUser {
+    pub id: String,
+    pub username: String,
+    pub email: Option<String>,
+    #[serde(rename = "firstName")]
+    pub first_name: Option<String>,
+    #[serde(rename = "lastName")]
+    pub last_name: Option<String>,
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+    #[serde(default, rename = "createdTimestamp")]
+    pub created_timestamp: Option<i64>,
+    /// Filled in by `list_users`, not by Keycloak's `/users` payload.
+    #[serde(default, skip_deserializing)]
+    pub groups: Vec<String>,
+    #[serde(default, skip_deserializing)]
+    pub realm_roles: Vec<String>,
+}
+
+fn default_enabled() -> bool {
+    true
 }
 
 impl KeycloakAdmin {
@@ -221,6 +253,139 @@ impl KeycloakAdmin {
             .await
             .map_err(|e| AppError::Internal(format!("keycloak group-by-path response: {e}")))?;
         Ok(group.id)
+    }
+
+    /// Removes `/org-<id>` and, with it, the `admin`/`member`/`player`
+    /// subgroups Keycloak deletes along with their parent — used when a
+    /// super-admin refuses a space-creation request, so the requester ends
+    /// up group-less (and therefore back on "Créer mon espace") instead of
+    /// stranded in a group whose organization row no longer exists.
+    ///
+    /// A group that isn't there any more isn't an error: the caller's job
+    /// is "make sure this space leaves no trace", and a 404 already
+    /// satisfies that.
+    pub async fn delete_org_groups(&self, org_id: Uuid) -> AppResult<()> {
+        let token = self.admin_token().await?;
+        let path = format!("org-{org_id}");
+        let resp = self
+            .http
+            .get(format!("{}/group-by-path/{path}", self.admin_base_url))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("keycloak group-by-path failed: {e}")))?;
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            tracing::warn!(%path, "keycloak group already absent, nothing to delete");
+            return Ok(());
+        }
+        if !resp.status().is_success() {
+            return Err(AppError::Internal(format!(
+                "keycloak group '{path}' lookup returned {}",
+                resp.status()
+            )));
+        }
+        let group: KeycloakGroup = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("keycloak group-by-path response: {e}")))?;
+
+        let resp = self
+            .http
+            .delete(format!("{}/groups/{}", self.admin_base_url, group.id))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("keycloak delete group failed: {e}")))?;
+        if !resp.status().is_success() && resp.status() != reqwest::StatusCode::NOT_FOUND {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AppError::Internal(format!(
+                "keycloak delete group returned {status}: {body}"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Every account in the realm, with the realm roles and group paths
+    /// each one carries — the raw material for the super-admin's
+    /// cross-space user listing. Keycloak has no "list users with their
+    /// groups" endpoint, so this is one call for the roster plus two per
+    /// user; at this app's scale (a handful of clubs) that's cheaper than
+    /// walking every org's group membership instead.
+    pub async fn list_users(&self) -> AppResult<Vec<KeycloakUser>> {
+        let token = self.admin_token().await?;
+        let resp = self
+            .http
+            .get(format!(
+                "{}/users?max=1000&briefRepresentation=false",
+                self.admin_base_url
+            ))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("keycloak list users failed: {e}")))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AppError::Internal(format!(
+                "keycloak list users returned {status}: {body}"
+            )));
+        }
+        let mut users: Vec<KeycloakUser> = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("keycloak list users response: {e}")))?;
+
+        for user in &mut users {
+            user.groups = self.user_group_paths(&token, &user.id).await?;
+            user.realm_roles = self.user_realm_roles(&token, &user.id).await?;
+        }
+        Ok(users)
+    }
+
+    async fn user_group_paths(&self, token: &str, user_id: &str) -> AppResult<Vec<String>> {
+        let resp = self
+            .http
+            .get(format!("{}/users/{user_id}/groups", self.admin_base_url))
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("keycloak user groups failed: {e}")))?;
+        if !resp.status().is_success() {
+            return Err(AppError::Internal(format!(
+                "keycloak user groups returned {}",
+                resp.status()
+            )));
+        }
+        let groups: Vec<KeycloakGroupPath> = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("keycloak user groups response: {e}")))?;
+        Ok(groups.into_iter().map(|g| g.path).collect())
+    }
+
+    async fn user_realm_roles(&self, token: &str, user_id: &str) -> AppResult<Vec<String>> {
+        let resp = self
+            .http
+            .get(format!(
+                "{}/users/{user_id}/role-mappings/realm/composite",
+                self.admin_base_url
+            ))
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|e| AppError::Internal(format!("keycloak user roles failed: {e}")))?;
+        if !resp.status().is_success() {
+            return Err(AppError::Internal(format!(
+                "keycloak user roles returned {}",
+                resp.status()
+            )));
+        }
+        let roles: Vec<KeycloakRole> = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Internal(format!("keycloak user roles response: {e}")))?;
+        Ok(roles.into_iter().map(|r| r.name).collect())
     }
 
     /// Looks up a Keycloak user by its `sub` (== Keycloak user id) and adds
