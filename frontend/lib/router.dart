@@ -10,6 +10,7 @@ import 'features/organizations/create_organization_screen.dart';
 import 'features/organizations/pending_approval_screen.dart';
 import 'features/organizations/superadmin_home_screen.dart';
 import 'features/organizations/superadmin_organizations_screen.dart';
+import 'features/organizations/superadmin_users_screen.dart';
 import 'features/players/dashboard_screen.dart';
 import 'features/players/player_detail_screen.dart';
 import 'features/settings/settings_screen.dart';
@@ -85,6 +86,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/superadmin/organizations',
         builder: (context, state) => const SuperAdminOrganizationsScreen(),
+      ),
+      GoRoute(
+        path: '/superadmin/users',
+        builder: (context, state) => const SuperAdminUsersScreen(),
       ),
       GoRoute(
         path: '/players/:id',

@@ -1,28 +1,23 @@
 import 'package:collection/collection.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_providers.dart';
 import '../../core/cagnotte_repository.dart';
+import '../../core/design/tokens.dart';
+import '../../core/error_message.dart';
 import '../../core/format.dart';
 import '../../core/push/push_notifications.dart';
 import '../../models/consumable_type.dart';
 import '../../models/player.dart';
+import '../../widgets/cagnotte_card.dart';
+import '../../widgets/common.dart';
+import '../../widgets/feedback.dart';
+import '../../widgets/money.dart';
+import '../../widgets/page_body.dart';
+import '../../widgets/states.dart';
 import 'players_providers.dart';
-
-/// Machine-readable slug the backend attaches to a handful of 403s (see
-/// `AppError::code` in the Rust backend) — lets a super-admin without a
-/// space of their own see a helpful message instead of a raw error, without
-/// the router forcibly redirecting everyone through the create-space flow.
-String? _errorCode(Object error) {
-  if (error is DioException) {
-    final data = error.response?.data;
-    if (data is Map && data['code'] is String) return data['code'] as String;
-  }
-  return null;
-}
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -52,12 +47,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void _clearSelection() => setState(_selected.clear);
 
   Future<void> _bulkDebit(ConsumableType consumable) async {
+    final count = _selected.length;
     setState(() => _busy = true);
     final repo = ref.read(cagnotteRepositoryProvider);
     try {
       for (final playerId in _selected) {
         await repo.recordConsumption(playerId, consumable.id);
       }
+      if (mounted) {
+        showSuccess(
+          context,
+          '${consumable.label} × $count — '
+          '${formatCents(consumable.priceCents * count)} débités',
+        );
+      }
+    } catch (error) {
+      if (mounted) showFailure(context, error);
     } finally {
       if (mounted) {
         setState(() {
@@ -78,79 +83,47 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final selectionMode = _selected.isNotEmpty;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          selectionMode ? '${_selected.length} sélectionné(s)' : 'Moelan App',
-        ),
-        leading: selectionMode
-            ? IconButton(
+      appBar: selectionMode
+          ? AppBar(
+              title: Text('${_selected.length} sélectionné(s)'),
+              leading: IconButton(
                 icon: const Icon(Icons.close),
+                tooltip: 'Annuler la sélection',
                 onPressed: _clearSelection,
-              )
-            : null,
-        actions: selectionMode
-            ? null
-            : [
-                if (isSuperAdmin)
+              ),
+            )
+          : AppBar(
+              title: const Text('Moelan'),
+              actions: [
+                if (isSuperAdmin) ...[
                   IconButton(
-                    icon: const Icon(Icons.verified_user),
+                    icon: const Icon(Icons.verified_user_outlined),
                     tooltip: 'Espaces en attente',
                     onPressed: () => context.push('/superadmin/organizations'),
                   ),
-                if (isAdmin)
                   IconButton(
-                    icon: const Icon(Icons.settings),
-                    tooltip: 'Réglages',
-                    onPressed: () => context.push('/settings'),
+                    icon: const Icon(Icons.people_outline),
+                    tooltip: 'Utilisateurs',
+                    onPressed: () => context.push('/superadmin/users'),
                   ),
+                ],
                 IconButton(
-                  icon: const Icon(Icons.bar_chart),
+                  icon: const Icon(Icons.insights_outlined),
                   tooltip: 'Statistiques',
                   onPressed: () => context.push('/stats'),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.history),
+                  icon: const Icon(Icons.receipt_long_outlined),
                   tooltip: 'Historique',
                   onPressed: () => context.push('/history'),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.logout),
-                  tooltip: 'Se déconnecter',
-                  onPressed: () async {
-                    await ref.read(oidcManagerProvider).logout();
-                  },
-                ),
+                _OverflowMenu(isAdmin: isAdmin),
+                const SizedBox(width: Gap.xs),
               ],
-      ),
+            ),
       body: playersAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) {
-          final code = _errorCode(err);
-          if (code == 'no_organization') {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text("Ce compte n'appartient à aucun espace."),
-                    const SizedBox(height: 12),
-                    FilledButton(
-                      onPressed: () => context.push('/create-organization'),
-                      child: const Text('Créer un espace'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-          if (code == 'org_pending') {
-            return const Center(
-              child: Text('Espace en attente de validation.'),
-            );
-          }
-          return Center(child: Text('Erreur : $err'));
-        },
+        loading: () => const _DashboardSkeleton(),
+        error: (err, _) => _DashboardError(error: err),
         data: (players) {
           final total = players.fold<int>(0, (sum, p) => sum + p.balanceCents);
           final targetCents = ref
@@ -158,27 +131,68 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               .value
               ?.organization
               ?.targetCents;
+
           return RefreshIndicator(
             onRefresh: () => ref.refresh(playersListProvider.future),
-            child: ListView(
-              children: [
-                _CagnotteHeader(totalCents: total, targetCents: targetCents),
-                const Divider(height: 1),
-                if (players.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: Text('Aucun joueur pour le moment.')),
-                  )
-                else
-                  for (final player in players)
-                    _PlayerTile(
-                      player: player,
-                      selectable: canWrite,
-                      selected: _selected.contains(player.id),
-                      selectionMode: selectionMode,
-                      onToggle: () => _toggleSelected(player.id),
+            child: PageBody(
+              child: ListView(
+                padding: const EdgeInsets.only(top: Gap.sm, bottom: Gap.xxxl),
+                children: [
+                  CagnotteCard(
+                    totalCents: total,
+                    targetCents: targetCents,
+                    playerCount: players.isEmpty ? null : players.length,
+                  ),
+                  if (players.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: Gap.xxl),
+                      child: EmptyState(
+                        icon: Icons.groups_outlined,
+                        title: 'Aucun joueur pour le moment',
+                        message: isAdmin
+                            ? "Ajoutez les membres de l'équipe pour commencer "
+                                  'à tenir la caisse.'
+                            : "L'administrateur de l'espace n'a pas encore "
+                                  'ajouté de joueur.',
+                        action: isAdmin
+                            ? FilledButton.icon(
+                                onPressed: () =>
+                                    _showAddPlayerDialog(context, ref),
+                                icon: const Icon(Icons.person_add_outlined),
+                                label: const Text('Ajouter un joueur'),
+                              )
+                            : null,
+                      ),
+                    )
+                  else ...[
+                    SectionHeader(
+                      'Effectif',
+                      trailing: canWrite
+                          ? Text(
+                              'Appui long : sélection',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            )
+                          : null,
                     ),
-              ],
+                    for (final player in players)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: Gap.sm),
+                        child: _PlayerCard(
+                          player: player,
+                          selectable: canWrite,
+                          selected: _selected.contains(player.id),
+                          selectionMode: selectionMode,
+                          onToggle: () => _toggleSelected(player.id),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
             ),
           );
         },
@@ -186,11 +200,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       bottomNavigationBar: selectionMode
           ? _BulkActionBar(busy: _busy, onDebit: _bulkDebit)
           : null,
-      floatingActionButton: isAdmin && !selectionMode
-          ? FloatingActionButton(
+      floatingActionButton:
+          isAdmin &&
+              !selectionMode &&
+              (playersAsync.value?.isNotEmpty ?? false)
+          ? FloatingActionButton.extended(
               onPressed: () => _showAddPlayerDialog(context, ref),
-              tooltip: 'Ajouter un joueur',
-              child: const Icon(Icons.person_add),
+              icon: const Icon(Icons.person_add_outlined),
+              label: const Text('Joueur'),
             )
           : null,
     );
@@ -199,24 +216,38 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _showAddPlayerDialog(BuildContext context, WidgetRef ref) async {
     final firstNameController = TextEditingController();
     final lastNameController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
 
     final created = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Ajouter un joueur'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: firstNameController,
-              decoration: const InputDecoration(labelText: 'Prénom'),
-              autofocus: true,
-            ),
-            TextField(
-              controller: lastNameController,
-              decoration: const InputDecoration(labelText: 'Nom'),
-            ),
-          ],
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: firstNameController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Prénom'),
+                autofocus: true,
+                validator: _required,
+              ),
+              const SizedBox(height: Gap.md),
+              TextFormField(
+                controller: lastNameController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Nom'),
+                validator: _required,
+                onFieldSubmitted: (_) {
+                  if (formKey.currentState!.validate()) {
+                    Navigator.of(context).pop(true);
+                  }
+                },
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -224,30 +255,141 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             child: const Text('Annuler'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.of(context).pop(true);
+              }
+            },
             child: const Text('Ajouter'),
           ),
         ],
       ),
     );
 
-    if (created != true) return;
-    if (firstNameController.text.trim().isEmpty ||
-        lastNameController.text.trim().isEmpty) {
-      return;
-    }
+    if (created != true || !context.mounted) return;
 
-    await ref
-        .read(cagnotteRepositoryProvider)
-        .createPlayer(
-          firstNameController.text.trim(),
-          lastNameController.text.trim(),
-        );
+    final firstName = firstNameController.text.trim();
+    final lastName = lastNameController.text.trim();
+    try {
+      await ref
+          .read(cagnotteRepositoryProvider)
+          .createPlayer(firstName, lastName);
+      if (context.mounted) {
+        showSuccess(context, "$firstName $lastName a rejoint l'effectif.");
+      }
+    } catch (error) {
+      if (context.mounted) showFailure(context, error);
+    }
     ref.invalidate(playersListProvider);
   }
 }
 
-/// Shown instead of the AppBar actions once ≥1 player is selected: one tap
+String? _required(String? value) =>
+    (value == null || value.trim().isEmpty) ? 'Champ obligatoire' : null;
+
+/// The settings and sign-out entries, folded into a menu: the app bar already
+/// carries four icons on a phone, and these two are the least used.
+class _OverflowMenu extends ConsumerWidget {
+  const _OverflowMenu({required this.isAdmin});
+
+  final bool isAdmin;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert),
+      tooltip: 'Plus',
+      onSelected: (value) async {
+        switch (value) {
+          case 'settings':
+            context.push('/settings');
+          case 'logout':
+            await ref.read(oidcManagerProvider).logout();
+        }
+      },
+      itemBuilder: (context) => [
+        if (isAdmin)
+          const PopupMenuItem(
+            value: 'settings',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.tune),
+              title: Text('Réglages'),
+            ),
+          ),
+        const PopupMenuItem(
+          value: 'logout',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.logout),
+            title: Text('Se déconnecter'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A 403 on the roster isn't really an error for two accounts: one that has
+/// no space yet, and one whose space is still pending. Both get a way
+/// forward instead of a red message.
+class _DashboardError extends StatelessWidget {
+  const _DashboardError({required this.error});
+
+  final Object error;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (errorCode(error)) {
+      case 'no_organization':
+        return EmptyState(
+          icon: Icons.add_home_outlined,
+          title: "Ce compte n'appartient à aucun espace",
+          message: 'Créez la caisse noire de votre équipe pour commencer.',
+          action: FilledButton(
+            onPressed: () => context.push('/create-organization'),
+            child: const Text('Créer un espace'),
+          ),
+        );
+      case 'org_pending':
+        return const EmptyState(
+          icon: Icons.hourglass_top_outlined,
+          title: 'Espace en attente de validation',
+          message:
+              "Un administrateur doit valider votre espace avant que vous "
+              "puissiez l'utiliser.",
+        );
+      default:
+        return ErrorView(error: error);
+    }
+  }
+}
+
+/// Keeps the page's shape while the roster loads, instead of collapsing to a
+/// spinner and snapping back into place a moment later.
+class _DashboardSkeleton extends StatelessWidget {
+  const _DashboardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return PageBody(
+      child: ListView(
+        padding: const EdgeInsets.only(top: Gap.sm),
+        children: [
+          const SkeletonBox(height: 168, radius: Radii.lg),
+          const SectionHeader('Effectif'),
+          for (var i = 0; i < 5; i++)
+            const Padding(
+              padding: EdgeInsets.only(bottom: Gap.sm),
+              child: SkeletonBox(height: 72, radius: Radii.md),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown instead of the app bar actions once ≥1 player is selected: one tap
 /// applies a bière/soft debit to every selected player at once. No bulk
 /// endpoint on the API — the volume for a single team is trivial, so a
 /// sequential loop of the existing per-player call is simpler than adding
@@ -261,94 +403,56 @@ class _BulkActionBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final consumablesAsync = ref.watch(consumableTypesProvider);
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: consumablesAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, _) => Text('Erreur : $err'),
-          data: (types) {
-            final beer = types.where((t) => t.code == 'beer').firstOrNull;
-            final soft = types.where((t) => t.code == 'soft').firstOrNull;
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (beer != null)
-                  FilledButton.icon(
-                    onPressed: busy ? null : () => onDebit(beer),
-                    icon: const Icon(Icons.sports_bar),
-                    label: Text('Bière (${formatCents(beer.priceCents)})'),
-                  ),
-                const SizedBox(width: 12),
-                if (soft != null)
-                  FilledButton.icon(
-                    onPressed: busy ? null : () => onDebit(soft),
-                    icon: const Icon(Icons.local_drink),
-                    label: Text('Soft (${formatCents(soft.priceCents)})'),
-                  ),
-              ],
-            );
-          },
+    return Material(
+      elevation: 3,
+      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Gap.lg,
+            vertical: Gap.md,
+          ),
+          child: consumablesAsync.when(
+            loading: () => const SizedBox(height: 48, child: LoadingView()),
+            error: (err, _) => SizedBox(
+              height: 48,
+              child: Center(child: Text(humanizeError(err))),
+            ),
+            data: (types) {
+              final beer = types.where((t) => t.code == 'beer').firstOrNull;
+              final soft = types.where((t) => t.code == 'soft').firstOrNull;
+              return Row(
+                children: [
+                  if (beer != null)
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: busy ? null : () => onDebit(beer),
+                        icon: const Icon(Icons.sports_bar_outlined),
+                        label: Text('Bière · ${formatCents(beer.priceCents)}'),
+                      ),
+                    ),
+                  if (beer != null && soft != null)
+                    const SizedBox(width: Gap.md),
+                  if (soft != null)
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        onPressed: busy ? null : () => onDebit(soft),
+                        icon: const Icon(Icons.local_drink_outlined),
+                        label: Text('Soft · ${formatCents(soft.priceCents)}'),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 }
 
-class _CagnotteHeader extends StatelessWidget {
-  const _CagnotteHeader({required this.totalCents, this.targetCents});
-
-  final int totalCents;
-  final int? targetCents;
-
-  @override
-  Widget build(BuildContext context) {
-    final target = targetCents;
-    // A negative or zero objective can't be filled — treat it the same as
-    // "no objective set" rather than showing a nonsensical bar.
-    final showProgress = target != null && target > 0;
-    final progress = showProgress
-        ? (totalCents / target).clamp(0, 1).toDouble()
-        : 0.0;
-
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          Text(
-            'Cagnotte totale',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            formatCents(totalCents),
-            style: Theme.of(context).textTheme.displaySmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text('Direction Moelan-sur-Mer 🌊'),
-          if (showProgress) ...[
-            const SizedBox(height: 16),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(value: progress, minHeight: 8),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              "${(progress * 100).round()} % de l'objectif (${formatCents(target)})",
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _PlayerTile extends StatelessWidget {
-  const _PlayerTile({
+class _PlayerCard extends StatelessWidget {
+  const _PlayerCard({
     required this.player,
     required this.selectable,
     required this.selected,
@@ -364,20 +468,13 @@ class _PlayerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final negative = player.balanceCents < 0;
-    return ListTile(
-      leading: selectable
-          ? Checkbox(value: selected, onChanged: (_) => onToggle())
-          : null,
-      title: Text(player.fullName),
-      trailing: Text(
-        formatCents(player.balanceCents),
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          color: negative ? Theme.of(context).colorScheme.error : null,
-        ),
-      ),
+    final theme = Theme.of(context);
+    return AppCard(
       selected: selected,
+      padding: const EdgeInsets.symmetric(
+        horizontal: Gap.lg,
+        vertical: Gap.md,
+      ),
       onTap: () {
         if (selectionMode) {
           if (selectable) onToggle();
@@ -386,6 +483,46 @@ class _PlayerTile extends StatelessWidget {
         }
       },
       onLongPress: selectable ? onToggle : null,
+      child: Row(
+        children: [
+          if (selected)
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: theme.colorScheme.primary,
+              child: Icon(
+                Icons.check,
+                size: 22,
+                color: theme.colorScheme.onPrimary,
+              ),
+            )
+          else
+            InitialsAvatar(player.fullName, muted: !player.active),
+          const SizedBox(width: Gap.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  player.fullName,
+                  style: theme.textTheme.titleSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (!player.active) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Inactif',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: Gap.sm),
+          BalancePill(player.balanceCents),
+        ],
+      ),
     );
   }
 }

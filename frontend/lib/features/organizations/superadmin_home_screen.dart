@@ -4,9 +4,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_providers.dart';
 import '../../core/cagnotte_repository.dart';
-import '../../core/format.dart';
+import '../../core/design/tokens.dart';
 import '../../models/organization.dart';
 import '../../models/player.dart';
+import '../../widgets/cagnotte_card.dart';
+import '../../widgets/common.dart';
+import '../../widgets/money.dart';
+import '../../widgets/page_body.dart';
+import '../../widgets/states.dart';
 
 /// Every space, approved or not — the super-admin operator has no space of
 /// their own to land on, so this is what they browse instead.
@@ -46,9 +51,14 @@ class _SuperAdminHomeScreenState extends ConsumerState<SuperAdminHomeScreen> {
         title: const Text('Espaces'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.verified_user),
-            tooltip: 'Espaces en attente',
+            icon: const Icon(Icons.verified_user_outlined),
+            tooltip: 'Demandes en attente',
             onPressed: () => context.push('/superadmin/organizations'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.people_outline),
+            tooltip: 'Utilisateurs',
+            onPressed: () => context.push('/superadmin/users'),
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -57,29 +67,37 @@ class _SuperAdminHomeScreenState extends ConsumerState<SuperAdminHomeScreen> {
               await ref.read(oidcManagerProvider).logout();
             },
           ),
+          const SizedBox(width: Gap.xs),
         ],
       ),
       body: orgsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Erreur : $err')),
+        loading: () => const LoadingView(),
+        error: (err, _) => ErrorView(
+          error: err,
+          onRetry: () => ref.invalidate(allOrganizationsProvider),
+        ),
         data: (orgs) {
           if (orgs.isEmpty) {
-            return const Center(child: Text('Aucun espace pour le moment.'));
+            return const EmptyState(
+              icon: Icons.groups_outlined,
+              title: 'Aucun espace pour le moment',
+              message:
+                  "Les équipes qui créent leur caisse noire apparaîtront ici.",
+            );
           }
-          final selected =
-              orgs.firstWhere(
-                (o) => o.id == _selectedOrgId,
-                orElse: () => orgs.first,
-              );
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: DropdownButtonFormField<String>(
+          final selected = orgs.firstWhere(
+            (o) => o.id == _selectedOrgId,
+            orElse: () => orgs.first,
+          );
+          return PageBody(
+            child: ListView(
+              padding: const EdgeInsets.only(top: Gap.lg, bottom: Gap.xxl),
+              children: [
+                DropdownButtonFormField<String>(
                   initialValue: selected.id,
                   decoration: const InputDecoration(
                     labelText: 'Espace',
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.groups_outlined),
                   ),
                   items: [
                     for (final org in orgs)
@@ -92,10 +110,15 @@ class _SuperAdminHomeScreenState extends ConsumerState<SuperAdminHomeScreen> {
                   ],
                   onChanged: (id) => setState(() => _selectedOrgId = id),
                 ),
-              ),
-              const Divider(height: 1),
-              Expanded(child: _OrgPlayers(orgId: selected.id)),
-            ],
+                if (!selected.approved)
+                  Padding(
+                    padding: const EdgeInsets.only(top: Gap.md),
+                    child: _PendingBanner(orgName: selected.name),
+                  ),
+                const SizedBox(height: Gap.lg),
+                _OrgPlayers(org: selected),
+              ],
+            ),
           );
         },
       ),
@@ -103,52 +126,110 @@ class _SuperAdminHomeScreenState extends ConsumerState<SuperAdminHomeScreen> {
   }
 }
 
-class _OrgPlayers extends ConsumerWidget {
-  const _OrgPlayers({required this.orgId});
+class _PendingBanner extends StatelessWidget {
+  const _PendingBanner({required this.orgName});
 
-  final String orgId;
+  final String orgName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(Radii.sm),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.hourglass_top_outlined,
+            size: 18,
+            color: theme.colorScheme.onTertiaryContainer,
+          ),
+          const SizedBox(width: Gap.sm),
+          Expanded(
+            child: Text(
+              "Cet espace attend encore votre validation : personne ne peut "
+              "y écrire.",
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onTertiaryContainer,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => context.push('/superadmin/organizations'),
+            child: const Text('Traiter'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OrgPlayers extends ConsumerWidget {
+  const _OrgPlayers({required this.org});
+
+  final Organization org;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final playersAsync = ref.watch(orgPlayersProvider(orgId));
+    final playersAsync = ref.watch(orgPlayersProvider(org.id));
 
     return playersAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => Center(child: Text('Erreur : $err')),
+      loading: () => const Padding(
+        padding: EdgeInsets.only(top: Gap.xl),
+        child: LoadingView(),
+      ),
+      error: (err, _) => ErrorView(
+        error: err,
+        onRetry: () => ref.invalidate(orgPlayersProvider(org.id)),
+      ),
       data: (players) {
         if (players.isEmpty) {
-          return const Center(child: Text('Aucun joueur pour le moment.'));
+          return const Padding(
+            padding: EdgeInsets.only(top: Gap.xl),
+            child: EmptyState(
+              icon: Icons.groups_outlined,
+              title: 'Aucun joueur',
+              message: "Cet espace n'a pas encore d'effectif.",
+            ),
+          );
         }
         final total = players.fold<int>(0, (sum, p) => sum + p.balanceCents);
-        return RefreshIndicator(
-          onRefresh: () => ref.refresh(orgPlayersProvider(orgId).future),
-          child: ListView(
-            children: [
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            CagnotteCard(
+              totalCents: total,
+              targetCents: org.targetCents,
+              playerCount: players.length,
+            ),
+            SectionHeader('Effectif', trailing: Text('${players.length}')),
+            for (final player in players)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Text(
-                    'Cagnotte totale : ${formatCents(total)}',
-                    style: Theme.of(context).textTheme.titleMedium,
+                padding: const EdgeInsets.only(bottom: Gap.sm),
+                child: AppCard(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.lg,
+                    vertical: Gap.md,
+                  ),
+                  child: Row(
+                    children: [
+                      InitialsAvatar(player.fullName, muted: !player.active),
+                      const SizedBox(width: Gap.md),
+                      Expanded(
+                        child: Text(
+                          player.fullName,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      BalancePill(player.balanceCents),
+                    ],
                   ),
                 ),
               ),
-              const Divider(height: 1),
-              for (final player in players)
-                ListTile(
-                  title: Text(player.fullName),
-                  trailing: Text(
-                    formatCents(player.balanceCents),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: player.balanceCents < 0
-                          ? Theme.of(context).colorScheme.error
-                          : null,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          ],
         );
       },
     );

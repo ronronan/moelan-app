@@ -2,8 +2,12 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/design/tokens.dart';
 import '../../core/format.dart';
 import '../../models/monthly_stat.dart';
+import '../../widgets/money.dart';
+import '../../widgets/page_body.dart';
+import '../../widgets/states.dart';
 import '../players/players_providers.dart';
 
 const _monthLabels = [
@@ -52,68 +56,198 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     final statsAsync = ref.watch(monthlyStatsProvider(_year));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Statistiques')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+      appBar: AppBar(
+        title: const Text('Statistiques'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: _YearSwitcher(
+            year: _year,
+            onChanged: (year) => setState(() => _year = year),
+          ),
+        ),
+      ),
+      body: statsAsync.when(
+        loading: () => const LoadingView(),
+        error: (err, _) => ErrorView(
+          error: err,
+          onRetry: () => ref.invalidate(monthlyStatsProvider(_year)),
+        ),
+        data: (stats) {
+          if (stats.isEmpty) {
+            return EmptyState(
+              icon: Icons.insights_outlined,
+              title: 'Rien à afficher pour $_year',
+              message: "Aucun mouvement n'a été enregistré cette année-là.",
+            );
+          }
+          return PageBody.wide(
+            child: ListView(
+              padding: const EdgeInsets.only(top: Gap.lg, bottom: Gap.xxl),
               children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  tooltip: 'Année précédente',
-                  onPressed: () => setState(() => _year -= 1),
+                _YearSummary(stats: stats),
+                const SizedBox(height: Gap.lg),
+                _ChartCard(
+                  title: 'Bières & softs',
+                  child: _ConsumptionChart(stats: stats),
                 ),
-                Text(
-                  '$_year',
-                  style: Theme.of(context).textTheme.titleLarge,
+                const SizedBox(height: Gap.lg),
+                _ChartCard(
+                  title: 'Amendes & crédits',
+                  child: _MoneyChart(stats: stats),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right),
-                  tooltip: 'Année suivante',
-                  onPressed: _year >= DateTime.now().year
-                      ? null
-                      : () => setState(() => _year += 1),
+                const SizedBox(height: Gap.lg),
+                _ChartCard(
+                  title: 'Solde cumulé de la cagnotte',
+                  child: _BalanceChart(stats: stats),
                 ),
+                const SizedBox(height: Gap.lg),
+                _StatsTable(stats: stats),
               ],
             ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Year navigation, pinned under the title rather than floating above the
+/// content — it applies to everything below, and scrolling it away made it
+/// easy to forget which year you were looking at.
+class _YearSwitcher extends StatelessWidget {
+  const _YearSwitcher({required this.year, required this.onChanged});
+
+  final int year;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final atCurrentYear = year >= DateTime.now().year;
+    return SizedBox(
+      height: 48,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            tooltip: 'Année précédente',
+            onPressed: () => onChanged(year - 1),
           ),
-          Expanded(
-            child: statsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Center(child: Text('Erreur : $err')),
-              data: (stats) {
-                if (stats.isEmpty) {
-                  return const Center(
-                    child: Text('Aucune donnée pour cette année.'),
-                  );
-                }
-                return ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    _ChartCard(
-                      title: 'Bières & softs',
-                      child: _ConsumptionChart(stats: stats),
-                    ),
-                    const SizedBox(height: 24),
-                    _ChartCard(
-                      title: 'Amendes & crédits',
-                      child: _MoneyChart(stats: stats),
-                    ),
-                    const SizedBox(height: 24),
-                    _ChartCard(
-                      title: 'Solde cumulé de la cagnotte',
-                      child: _BalanceChart(stats: stats),
-                    ),
-                    const SizedBox(height: 24),
-                    _StatsTable(stats: stats),
-                  ],
-                );
-              },
+          SizedBox(
+            width: 72,
+            child: Text(
+              '$year',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: 'Année suivante',
+            onPressed: atCurrentYear ? null : () => onChanged(year + 1),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Three numbers that answer "how did the season go" before any chart is
+/// read. The charts show the shape; this shows the outcome.
+class _YearSummary extends StatelessWidget {
+  const _YearSummary({required this.stats});
+
+  final List<MonthlyStat> stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final drinks = stats.fold<int>(
+      0,
+      (sum, s) => sum + s.beerCount + s.softCount,
+    );
+    final fines = stats.fold<int>(0, (sum, s) => sum + s.fineTotalCents);
+    // The cumulative balance of the last month with activity — i.e. where
+    // the kitty stood at the end of the period shown.
+    final balance = stats.last.balanceCents;
+
+    return Row(
+      children: [
+        Expanded(
+          child: _StatTile(
+            icon: Icons.sports_bar_outlined,
+            label: 'Consommations',
+            value: '$drinks',
+          ),
+        ),
+        const SizedBox(width: Gap.md),
+        Expanded(
+          child: _StatTile(
+            icon: Icons.gavel_outlined,
+            label: 'Amendes',
+            value: formatCents(fines),
+          ),
+        ),
+        const SizedBox(width: Gap.md),
+        Expanded(
+          child: _StatTile(
+            icon: Icons.savings_outlined,
+            label: 'Cagnotte',
+            valueWidget: MoneyText(
+              balance,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.icon,
+    required this.label,
+    this.value,
+    this.valueWidget,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? value;
+  final Widget? valueWidget;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Gap.md,
+          vertical: Gap.lg,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(height: Gap.sm),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child:
+                  valueWidget ??
+                  Text(value!, style: theme.textTheme.titleMedium),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -129,12 +263,12 @@ class _ChartCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 24, 16),
+        padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.lg, Gap.xl, Gap.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 16),
+            const SizedBox(height: Gap.lg),
             SizedBox(height: 220, child: child),
           ],
         ),
@@ -482,7 +616,7 @@ class _StatsTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(Gap.sm),
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(

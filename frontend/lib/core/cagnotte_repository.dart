@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/app_user.dart';
 import '../models/consumable_type.dart';
 import '../models/fine_type.dart';
 import '../models/me_status.dart';
@@ -119,6 +120,30 @@ class CagnotteRepository {
     return Transaction.fromJson(res.data);
   }
 
+  /// Admin-only correction: adds a signed line to the ledger rather than
+  /// rewriting the balance, which is why the backend insists on a note.
+  Future<Transaction> recordAdjustment(
+    String playerId,
+    int amountCents,
+    String note,
+  ) async {
+    final res = await _dio.post(
+      '/api/players/$playerId/adjustments',
+      data: {'amount_cents': amountCents, 'note': note},
+    );
+    return Transaction.fromJson(res.data);
+  }
+
+  /// A player is never deleted — taking them off the roster means clearing
+  /// this flag, so their ledger history stays readable.
+  Future<Player> setPlayerActive(String playerId, bool active) async {
+    final res = await _dio.patch(
+      '/api/players/$playerId',
+      data: {'active': active},
+    );
+    return Player.fromJson(res.data);
+  }
+
   Future<List<Transaction>> listPlayerTransactions(String playerId) async {
     final res = await _dio.get('/api/players/$playerId/transactions');
     return (res.data as List).map((e) => Transaction.fromJson(e)).toList();
@@ -164,6 +189,20 @@ class CagnotteRepository {
   Future<List<Player>> listPlayersForOrg(String orgId) async {
     final res = await _dio.get('/api/organizations/$orgId/players');
     return (res.data as List).map((e) => Player.fromJson(e)).toList();
+  }
+
+  /// Super-admin only: refuses a space-creation request, deleting the
+  /// pending space and its Keycloak groups. The backend rejects this for an
+  /// already-approved space.
+  Future<void> rejectOrganization(String id) async {
+    await _dio.delete('/api/organizations/$id');
+  }
+
+  /// Super-admin only: every account of the instance, with its role and the
+  /// space it belongs to.
+  Future<List<AppUser>> listUsers() async {
+    final res = await _dio.get('/api/users');
+    return (res.data as List).map((e) => AppUser.fromJson(e)).toList();
   }
 
   Future<Organization> approveOrganization(String id) async {
