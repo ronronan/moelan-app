@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT price_cents FROM consumable_types WHERE organization_id = $1 AND code = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "price_cents",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "consumable_types",
+            "name": "price_cents"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3196b64edc2eb945db3a278fb9572aefcd679a486e3e1484ac39675c4c6fff5f"
+}

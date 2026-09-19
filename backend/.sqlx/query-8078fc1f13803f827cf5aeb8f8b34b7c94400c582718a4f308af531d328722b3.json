@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            (SELECT COUNT(*) FROM consumable_types WHERE organization_id = $1) AS \"consumables!\",\n            (SELECT COUNT(*) FROM fine_types WHERE organization_id = $1) AS \"fines!\",\n            (SELECT COUNT(*) FROM players WHERE organization_id = $1) AS \"players!\",\n            (SELECT COUNT(*) FROM transactions WHERE organization_id = $1) AS \"transactions!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "consumables!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "fines!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "players!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "transactions!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "8078fc1f13803f827cf5aeb8f8b34b7c94400c582718a4f308af531d328722b3"
+}

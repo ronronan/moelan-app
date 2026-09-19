@@ -12,6 +12,12 @@ COPY Cargo.toml Cargo.lock ./
 COPY .sqlx ./.sqlx
 COPY migrations ./migrations
 COPY src ./src
+# Cargo refuses to even parse the manifest if a declared target's source is
+# missing, and Cargo.toml declares the `cucumber` test target (it needs
+# `harness = false`). The sources stay in the builder stage; `cargo build`
+# doesn't compile test targets, and the runtime image below copies only the
+# executable.
+COPY tests ./tests
 
 ENV SQLX_OFFLINE=true
 RUN cargo build --release

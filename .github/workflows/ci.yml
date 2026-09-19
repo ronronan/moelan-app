@@ -52,6 +52,16 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --all-targets
 
+      # The image build has no database: sqlx verifies its queries against the
+      # committed .sqlx cache instead. Every other step here runs against a
+      # live Postgres, so nothing else notices a stale cache — this is what
+      # catches a new `sqlx::query!` whose metadata wasn't committed
+      # (`cargo sqlx prepare -- --all-targets`).
+      - name: cargo check (sqlx offline, as the Docker build does)
+        run: cargo check --all-targets
+        env:
+          SQLX_OFFLINE: true
+
       - name: cargo test
         run: cargo test
 

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO consumable_types (organization_id, code, label, price_cents) VALUES\n                ($1, 'beer', 'Bière', 100), ($1, 'soft', 'Soft', 100)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f5990947511a00ee0124856c6305ed2a8218edaca53eb0deedd512868da5846e"
+}

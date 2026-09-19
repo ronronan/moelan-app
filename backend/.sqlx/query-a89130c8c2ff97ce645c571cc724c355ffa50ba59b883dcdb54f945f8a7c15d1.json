@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO fine_types (organization_id, code, label, amount_cents) VALUES\n                ($1, 'late_training', 'Retard entraînement', 200),\n                ($1, 'red_card', 'Carton rouge', 500)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a89130c8c2ff97ce645c571cc724c355ffa50ba59b883dcdb54f945f8a7c15d1"
+}
