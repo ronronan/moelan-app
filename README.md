@@ -240,10 +240,32 @@ ligne sur le Play Store).
 
 L'app iOS n'a pas été configurée (nécessite un Mac).
 
+## Spécification et tests fonctionnels
+
+Le dossier [`spec/`](spec/) décrit ce que l'application fait aujourd'hui,
+fonctionnalité par fonctionnalité ([`spec/fonctionnalites/`](spec/fonctionnalites/)),
+avec une [matrice des rôles](spec/roles.md) et les mêmes règles écrites en
+Gherkin ([`spec/features/`](spec/features/)).
+
+Ces scénarios sont **exécutables** : ils tournent contre le vrai routeur, les
+vrais extracteurs d'autorisation et un vrai Postgres, avec un Keycloak simulé
+en mémoire (JWKS + Admin API) et de vrais jetons RS256 signés par une clé de
+test.
+
+```bash
+docker compose up -d postgres
+cd backend
+DATABASE_URL="postgres://moelan:changeme@localhost:5432/app" cargo test --test cucumber
+```
+
+La base doit être migrée au préalable (l'API le fait au démarrage, ou appliquer
+`backend/migrations/*.sql` à la main).
+
 ## CI
 
 `.github/workflows/ci.yml` fait tourner, sur chaque push/PR : `cargo fmt
 --check`, `cargo clippy`, `cargo test` (contre un vrai Postgres de service) côté
-backend, et `flutter analyze` côté frontend.
+backend — ce qui inclut les scénarios Gherkin de `spec/features/` — et
+`flutter analyze` + `flutter test` côté frontend.
 
 Voir le plan d'implémentation complet dans `PLAN.md` (jalons M0 à M10).

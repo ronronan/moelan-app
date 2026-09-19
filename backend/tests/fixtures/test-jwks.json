@@ -1,0 +1,12 @@
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "alg": "RS256",
+      "kid": "moelan-test-key",
+      "n": "wbkMSil-0Z32-dOZCaUCuLSLATo9pe97DRS0NHThqJpWB51p96VwwmBwbhIDOGqVnhkz_Zujyx6cad0CBdtFGuSNJpq-zTBfpLMWFFyWQHthCLD4QY6kvp-HuuwlP-VO4D6ZbGYXMyJSK03RmWHiOK2l730N_lE2oSQEofl8AuniG0zDJ4Ls_M706iwJZlfpHWqYMVE35Hyn1kI1mV7jdZqOqa3rijIGYji5hCTnDlB5l64-CVgOWYwC3UA0AlttXBX-7NjAq_tKvtdHf4Ay7UHCEu9xGRhJHq7jXo9sRyUcUuSma3R34_J1PL1261M_iY7Ub55P6l_rvqUnxQH3Dw",
+      "e": "AQAB"
+    }
+  ]
+}

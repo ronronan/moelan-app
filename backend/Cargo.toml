@@ -3,6 +3,14 @@ name = "moelan-api"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "moelan_api"
+path = "src/lib.rs"
+
+[[bin]]
+name = "moelan-api"
+path = "src/main.rs"
+
 [dependencies]
 axum = "0.8.9"
 chrono = { version = "0.4.45", features = ["serde"] }
@@ -19,3 +27,15 @@ tower-http = { version = "0.7.1", features = ["cors"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 uuid = { version = "1.26.0", features = ["v4", "serde"] }
+
+# Cucumber drives its own runner (`fn main`), so the default libtest
+# harness has to be turned off for this test target.
+[[test]]
+name = "cucumber"
+harness = false
+
+[dev-dependencies]
+cucumber = "0.23.0"
+futures = "0.3.34"
+http-body-util = "0.1.5"
+tower = "0.5.3"
